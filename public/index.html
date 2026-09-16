@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Social Agent — Autonomous Social Media Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">SA</div>
+      <div>
+        <h1>Social Agent</h1>
+        <p>Autonomous social media brain · 11 platforms</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="status-pill" id="agentStatus">idle</div>
+      <button class="btn btn-primary" id="cycleBtn">Run brain now</button>
+      <button class="btn" id="toggleBtn">Pause agent</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="kpis" id="kpis"></section>
+
+    <div class="grid">
+      <section class="card col-wide">
+        <div class="card-head">
+          <h2>Brain thinking</h2>
+          <span class="chip" id="cycleCount">cycle 0</span>
+        </div>
+        <div id="thinkingBox" class="thinking-box">
+          <p class="muted">The agent is idle. Press "Run brain now" to start a deep-reasoning cycle.</p>
+        </div>
+
+        <div class="card-head mt">
+          <h2>Write a post</h2>
+        </div>
+        <div class="composer">
+          <textarea id="postText" rows="3" placeholder="Leave empty to let AI write one based on your niche…"></textarea>
+          <input id="postTopic" placeholder="Topic (optional): 5 AI tools saving time" />
+          <div class="row">
+            <select id="postPlatform"></select>
+            <button class="btn btn-primary" id="postBtn">Post now</button>
+            <button class="btn" id="postAllBtn">Post to all</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>Goals</h2></div>
+        <div id="goalsBox"></div>
+      </section>
+    </div>
+
+    <div class="grid">
+      <section class="card col-wide">
+        <div class="card-head"><h2>Platforms</h2></div>
+        <div class="platforms" id="platforms"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Inbox</h2>
+          <span class="chip" id="inboxCount">0 new</span>
+        </div>
+        <div id="inboxBox" class="inbox"></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="card-head"><h2>Activity</h2></div>
+      <div id="activity" class="activity"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Settings</h2></div>
+      <div class="settings">
+        <label>Niche <input id="setNiche" placeholder="AI and technology" /></label>
+        <label>Tone
+          <select id="setTone">
+            <option>professional</option><option>friendly</option><option>bold</option><option>expert</option>
+          </select>
+        </label>
+        <label>Follower target <input id="setTarget" type="number" /></label>
+        <label class="check"><input id="setAutoPost" type="checkbox" /> Auto post</label>
+        <label class="check"><input id="setAutoReply" type="checkbox" /> Auto reply</label>
+        <button class="btn" id="saveSettings">Save</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

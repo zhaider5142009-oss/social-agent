@@ -1,0 +1,14 @@
+{
+  "_README": "Map each platform to a real MCP server here. type 'stdio' spawns a command; type 'http'/'sse' speaks to a URL. Leave a platform out to use REST credentials (env) or simulation.",
+  "telegram": {
+    "type": "stdio",
+    "command": "npx",
+    "args": ["-y", "@someorg/telegram-mcp"],
+    "env": { "TELEGRAM_BOT_TOKEN": "" }
+  },
+  "linkedin": {
+    "type": "stdio",
+    "command": "npx",
+    "args": ["-y", "@someorg/linkedin-mcp"]
+  }
+}

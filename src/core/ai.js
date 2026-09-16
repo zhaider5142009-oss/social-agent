@@ -1,0 +1,183 @@
+import { config } from '../config.js';
+import { info, warn, error } from './logger.js';
+
+const DEFAULT_TIMEOUT = 120000;
+const MAX_CONCURRENT = 1;
+const DEFAULT_MAX_TOKENS = 1200; // keep within small-credit accounts; raise in .env if you load credits
+
+class Queue {
+  constructor(limit) {
+    this.limit = limit;
+    this.active = 0;
+    this.waiters = [];
+  }
+  async run(fn) {
+    if (this.active >= this.limit) {
+      await new Promise((r) => this.waiters.push(r));
+    }
+    this.active += 1;
+    try {
+      return await fn();
+    } finally {
+      this.active -= 1;
+      if (this.waiters.length) this.waiters.shift()();
+    }
+  }
+}
+
+function extractJson(text) {
+  if (!text) return null;
+  const trimmed = text.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {}
+  const fenced = trimmed.match(/(?:```(?:json)?\s*)([\s\S]*?)(?:\s*```)/);
+  if (fenced) {
+    try { return JSON.parse(fenced[1]); } catch {}
+  }
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    try { return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1)); } catch {}
+  }
+  return null;
+}
+
+class Ai {
+  constructor() {
+    this.queue = new Queue(MAX_CONCURRENT);
+    this.tokensIn = 0;
+    this.tokensOut = 0;
+    this.calls = 0;
+    this.fallbackCount = 0;
+    this.breakerOpenUntil = 0;
+    this.consecutiveFailures = 0;
+  }
+
+  async chat({ system, user, model, json = false, temperature = 0.7, maxTokens = DEFAULT_MAX_TOKENS, signal }) {
+    if (!config.openrouter.apiKey) {
+      warn('ai', 'No OpenRouter key. Using heuristic fallback.');
+      this.fallbackCount += 1;
+      return json ? this._heuristicJson(system, user) : this._heuristicText(system, user);
+    }
+    if (Date.now() < this.breakerOpenUntil) {
+      this.fallbackCount += 1;
+      return json ? this._heuristicJson(system, user) : this._heuristicText(system, user);
+    }
+    return this.queue.run(() => this._chatRaw({ system, user, model, json, temperature, maxTokens, signal }));
+  }
+
+  _noteFailure() {
+    this.consecutiveFailures += 1;
+    if (this.consecutiveFailures >= 3) {
+      this.breakerOpenUntil = Date.now() + 180000; // 3 min
+      warn('ai', 'Circuit breaker open for 3 min after repeated failures.');
+      this.consecutiveFailures = 0;
+    }
+  }
+
+  _noteSuccess() {
+    this.consecutiveFailures = 0;
+  }
+
+  async _chatRaw({ system, user, model, json, temperature, maxTokens, signal, retries = 2 }) {
+    const body = {
+      model: model || config.openrouter.model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+    };
+    if (json) body.response_format = { type: 'json_object' };
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), signal ? 0 : DEFAULT_TIMEOUT);
+
+    let res;
+    try {
+      res = await fetch(config.openrouter.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.openrouter.apiKey}`,
+          'HTTP-Referer': 'http://localhost:3000',
+          'X-Title': 'Social Agent',
+        },
+        body: JSON.stringify(body),
+        signal: signal || controller.signal,
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      error('ai', `OpenRouter request failed: ${e.message}`);
+      this._noteFailure();
+      this.fallbackCount += 1;
+      return json ? this._heuristicJson(system, user) : this._heuristicText(system, user);
+    }
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      if (res.status === 429 || res.status === 402) {
+        if (retries > 0) {
+          warn('ai', `OpenRouter rate/budget (${res.status}) — retrying with backoff (${retries} left).`);
+          await new Promise((r) => setTimeout(r, 4000 + Math.random() * 6000));
+          return this._chatRaw({ system, user, model, json, temperature, maxTokens, signal, retries: retries - 1 });
+        }
+        error('ai', `OpenRouter quota exhausted after retries (${res.status}). Falling back.`);
+        this._noteFailure();
+        this.fallbackCount += 1;
+        return json ? this._heuristicJson(system, user) : this._heuristicText(system, user);
+      }
+      error('ai', `OpenRouter ${res.status}: ${text.slice(0, 300)}`);
+      this._noteFailure();
+      this.fallbackCount += 1;
+      return json ? this._heuristicJson(system, user) : this._heuristicText(system, user);
+    }
+
+    this._noteSuccess();
+    const data = await res.json();
+    const msg = data.choices?.[0]?.message?.content ?? '';
+    this.tokensIn += data.usage?.prompt_tokens ?? 0;
+    this.tokensOut += data.usage?.completion_tokens ?? 0;
+    this.calls += 1;
+    info('ai', `chat ok (${data.usage?.prompt_tokens ?? 0} in / ${data.usage?.completion_tokens ?? 0} out)`);
+
+    if (json) {
+      const parsed = extractJson(msg);
+      return parsed ?? { raw: msg };
+    }
+    return msg;
+  }
+
+  async plan(system, user, opts = {}) {
+    return await this.chat({ ...opts, system, user, json: true, temperature: 0.4 });
+  }
+
+  stats() {
+    return { calls: this.calls, in: this.tokensIn, out: this.tokensOut, fallbacks: this.fallbackCount };
+  }
+
+  _heuristicText(system, user) {
+    if (user.includes('reply') || system.includes('reply')) {
+      return 'Thanks for reaching out! I really appreciate the message and will get back to you shortly.';
+    }
+    return 'Draft generated while offline. Enable OpenRouter key for full intelligence.';
+  }
+
+  _heuristicJson(system) {
+    if (system.includes('reply')) {
+      return { reply: 'Thanks for reaching out! I appreciate it and will follow up shortly.' };
+    }
+    if (system.includes('post')) {
+      return { text: 'Building the future of autonomous social media — one post at a time.' };
+    }
+    if (system.includes('plan')) {
+      return { reasoning: 'offline fallback: no planning actions this cycle', actions: [] };
+    }
+    return {};
+  }
+}
+
+export const ai = new Ai();

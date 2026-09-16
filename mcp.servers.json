@@ -1,0 +1,3 @@
+{
+  "_README": "Map platforms to real MCP servers. Copy a platform from mcp.servers.example.json and set the command/url/token. When mapped, the connector will call MCP tools; otherwise it falls back to REST credentials (.env) or simulation."
+}
