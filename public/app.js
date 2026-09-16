@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const state = { data: null };
 
-const VIEWS = ['dashboard', 'connectors', 'inbox', 'brain', 'growth', 'activity', 'settings'];
+const VIEWS = ['dashboard', 'connectors', 'inbox', 'brain', 'growth', 'viral', 'activity', 'settings'];
 
 async function fetchJson(url, opts) {
   const r = await fetch(url, {
@@ -185,6 +185,40 @@ function renderGrowth(d) {
     : '<div class="muted">The agent will remember what content wins followers here.</div>';
 }
 
+/* ---------------- Render: viral engine ---------------- */
+function renderViral(d) {
+  const m = d.momentum;
+  const box = $('momentumBox');
+  if (box) {
+    box.innerHTML = m
+      ? `<div class="mom-row">
+          <div class="mom-num">${fmt(m.current)}</div>
+          <div class="mom-label">of ${fmt(m.target)} followers</div>
+          <div class="mom-bar"><div style="width:${Math.max(0.3, m.pct)}%"></div></div>
+          <div class="mom-pct">${m.pct.toFixed(3)}% · ${fmt(m.remaining)} to go</div>
+        </div>
+        <div class="mom-grid">
+          ${(m.perPlatform || []).map((p) => `<div class="mom-chip"><b>${escapeHtml(p.name)}</b><span>${fmt(p.followers)}</span><span class="freq">${p.freq}x/day</span></div>`).join('')}
+        </div>`
+      : '<div class="muted">Momentum tracker will project the path to 1M once cycles run.</div>';
+  }
+
+  const vs = $('viralStats');
+  if (vs) vs.textContent = `${d.viral?.generated || 0} generated · ${d.viral?.rejected || 0} rejected · best ${d.viral?.bestScore || 0}`;
+
+  const rules = d.algo?.rules || {};
+  const rulesEl = $('algoRules');
+  if (rulesEl) {
+    rulesEl.innerHTML = Object.entries(rules).map(([name, r]) => `
+      <div class="algo">
+        <div class="algo-head"><b>${escapeHtml(r.name)}</b><span class="chip">${r.freq}x/day · ${escapeHtml(r.bestTimes.join('h, '))}h</span></div>
+        <div class="algo-row"><span class="algo-k">Rewards</span><span>${escapeHtml(r.rewards.join(', '))}</span></div>
+        <div class="algo-row"><span class="algo-k">Punishes</span><span>${escapeHtml(r.punishes.join(', '))}</span></div>
+        <div class="algo-row"><span class="algo-k">Format</span><span>${escapeHtml(r.format)}</span></div>
+      </div>`).join('') || '<div class="muted">Loading algorithm rulebook…</div>';
+  }
+}
+
 /* ---------------- Render: activity ---------------- */
 function renderActivity(d) {
   const items = d.activity || [];
@@ -220,6 +254,7 @@ function renderAll(d) {
   renderInbox(d);
   renderThinking(d);
   renderGrowth(d);
+  renderViral(d);
   renderActivity(d);
   renderAiStatus(d);
 
@@ -379,6 +414,27 @@ function setup() {
       $('humOut').textContent = 'Error: ' + e.message;
     }
     $('humBtn').disabled = false;
+  });
+
+  // Viral content lab
+  $('virGenBtn').addEventListener('click', async () => {
+    $('virGenBtn').disabled = true;
+    $('virOut').className = 'hum-out muted';
+    $('virOut').textContent = 'Generating an algorithm-conformant viral post…';
+    try {
+      const r = await fetchJson('/api/viral/generate', { method: 'POST', body: JSON.stringify({ platform: $('virPlatform').value, topic: $('virTopic').value, tone: $('setTone').value }) });
+      if (!r.ok) throw new Error(r.error || 'generation failed');
+      const p = r.post || {};
+      $('virOut').className = 'hum-out';
+      $('virOut').innerHTML = `<b style="color:${r.virality >= 45 ? '#4ade80' : '#f0bf4b'}">Virality ${r.virality}/100</b> — <span class="muted">${escapeHtml((r.algo && r.algo.hook) || '')}</span>
+        <pre>${escapeHtml(p.text)}</pre>
+        ${p.hashtags ? `<div class="muted">${escapeHtml(p.hashtags.join(' '))}</div>` : ''}
+        ${p.cta ? `<div class="cta-line">CTA: ${escapeHtml(p.cta)}</div>` : ''}`;
+    } catch (e) {
+      $('virOut').className = 'hum-out';
+      $('virOut').textContent = 'Error: ' + e.message;
+    }
+    $('virGenBtn').disabled = false;
   });
 
   let evt;

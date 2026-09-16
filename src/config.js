@@ -23,6 +23,12 @@ export const config = {
     cadence: num('AGENT_CADENCE', 45),
     maxActions: num('MAX_ACTIONS_PER_CYCLE', 4),
   },
+  viral: {
+    target: num('FOLLOWER_TARGET', 1000000),
+    qualityFloor: num('VIRAL_QUALITY_FLOOR', 38),
+    ampOn: env('VIRAL_AMPLIFY', 'true').toLowerCase() !== 'false',
+    maxAmpPerCycle: num('VIRAL_MAX_AMP_PER_CYCLE', 2),
+  },
   sim: {
     startFollowers: num('SIM_START_FOLLOWERS', 1500),
     growthPerPost: num('SIM_GROWTH_PER_POST', 12),

@@ -19,6 +19,25 @@ intelligence** — all from one ChatGPT-style control room.
   ones compounding (LinkedIn > Telegram > Discord-style rankings), and **learns a playbook** of which
   content actually gained followers, so future posts lean into winners.
 
+## Virality engine (million-follower machinery)
+
+Every post is manufactured by a three-lever viral system, aimed at a default **1,000,000 followers**:
+
+1. **Algorithm rulebook** (`src/core/algo.js`) — each platform's live algorithm signals are encoded:
+   what it *rewards* (watch time, saves, shares, first-hour replies, dwell time, CTR…), what it
+   *punishes* (link-only posts, tag spam, slow intros, engagement-bait…), its reward windows, ideal
+   format and hook style. No post is ever written "generic" — it is written to the platform's serve
+   engine.
+2. **Virality scoring & quality floor** (`src/core/viral.js`) — every draft is scored 0-100 for hook,
+   CTA, emotive pull, scannability and platform-fit. Drafts below the floor (default 38) are
+   re-generated up to 5× and never published. Winners (floor+12) are **amplified** — repurposed and
+   spread to every other platform so a winning idea echoes everywhere.
+3. **Momentum loop** — follower growth feeds cadence: frequency scales toward each platform's ideal,
+   publishing happens in reward windows, and the UI tracks the live projection to the 1M milestone.
+
+Simulation now rewards virality: high-scoring posts compound faster, so you can watch quality content
+out-perform mediocre content in real time, exactly like a real platform algorithm.
+
 ## ChatGPT-style UI
 
 The web UI is modeled after ChatGPT: a collapsible dark sidebar with all features:
@@ -29,9 +48,10 @@ The web UI is modeled after ChatGPT: a collapsible dark sidebar with all feature
   **Save** and **Test** buttons. Connect any connector right from the sidebar.
 - **Inbox** — live incoming messages on all platforms; each has **Send** and an **✨ AI** button
   that drafts a humanized reply for you to send.
-- **Brain & Thinking** — the agent's deep reasoning, plus a **humanizer test bench** to watch
-  extreme-human replies get written live.
+- **Brain & Thinking** — the agent's deep reasoning, plus a **humanizer test bench**.
 - **Growth Intel** — platform scores and the learned playbook.
+- **Viral Engine** — **Momentum to 1M** tracker, the full per-platform **algorithm rulebook**, and a
+  **viral content lab** that generates + scores an algorithm-conformant post on demand.
 - **Activity Log** — everything the agent did, via live SSE.
 - **Settings** — niche, tone, follower target, auto toggles, AI provider status.
 
@@ -132,16 +152,18 @@ src/
     ai.js                  AI client (Gemini + OpenRouter, queue/retry/model-chain breaker)
     humanizer.js           ★ extreme humanizer — replies that read like a real person
     growth.js              ★ growth intelligence — scores, posting plan, learned playbook
+    viral.js               ★ virality engine — scoring, quality floor, amplification, momentum
+    algo.js                ★ platform algorithm rulebook (rewards, punishes, windows, formats)
   mcp/                     stdio + HTTP MCP clients, manager
-  platforms/               base connector + 11 platform adapters + sim engine
+  platforms/               base connector + 11 platform adapters + sim engine (virality-aware)
   agent/
     orchestrator.js        the autonomous loop
     planner.js             deep-reasoning brain (loads skills/)
-    content.js             platform-aware post/reply generation
+    content.js             algorithm-conformant, virality-scored post/reply generation
     scheduler.js           best-time queue + first-run seed
-    goals.js               KPI goal tracking
+    goals.js               KPI goal tracking (1M target by default)
   server.js                Express + REST + SSE
-public/                    ChatGPT-style dark UI (HTML/CSS/JS)
+public/                    ChatGPT-style dark UI (HTML/CSS/JS) with Viral Engine view
 skills/                    markdown skill library injected into the planner
 data/state.json            persisted state (created at runtime)
 ```

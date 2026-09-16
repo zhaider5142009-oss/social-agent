@@ -32,6 +32,7 @@
         </button>
         <button class="nav-item" data-view="brain"><span class="nav-ico">◎</span> Brain &amp; Thinking</button>
         <button class="nav-item" data-view="growth"><span class="nav-ico">▲</span> Growth Intel</button>
+        <button class="nav-item" data-view="viral"><span class="nav-ico">✪</span> Viral Engine</button>
         <button class="nav-item" data-view="activity"><span class="nav-ico">≋</span> Activity Log</button>
         <button class="nav-item" data-view="settings"><span class="nav-ico">⚙</span> Settings</button>
       </nav>
@@ -136,6 +137,37 @@
         <div class="card">
           <div class="card-head"><h2>Learned playbook (what worked)</h2></div>
           <div id="playbook" class="playbook"></div>
+        </div>
+      </section>
+
+      <!-- ============ VIRAL ENGINE ============ -->
+      <section class="view" id="view-viral">
+        <div class="view-head">
+          <h2>Viral Engine</h2>
+          <span class="head-sub">Algorithm-optimized content scored for virality, then spread everywhere</span>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Momentum to 1M</h2></div>
+          <div id="momentumBox" class="momentum-box"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Algorithm rules per platform</h2>
+            <span class="chip" id="viralStats">0 generated</span>
+          </div>
+          <div id="algoRules" class="algo-rules"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Viral content lab</h2></div>
+          <div class="humanize-bench">
+            <select id="virPlatform"><option value="x">X</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="linkedin">LinkedIn</option><option value="youtube">YouTube</option><option value="telegram">Telegram</option><option value="discord">Discord</option><option value="reddit">Reddit</option><option value="whatsapp">WhatsApp</option><option value="patreon">Patreon</option><option value="snapchat">Snapchat</option></select>
+            <input id="virTopic" placeholder="Topic (optional) · 5 AI tools saving time" style="flex:1;min-width:180px" />
+            <button class="btn btn-primary" id="virGenBtn">Generate viral post</button>
+            <div id="virOut" class="hum-out muted">A scored, algorithm-conformant post appears here.</div>
+          </div>
         </div>
       </section>
 

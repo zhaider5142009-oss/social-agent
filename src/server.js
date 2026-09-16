@@ -9,6 +9,8 @@ import { ai } from './core/ai.js';
 import { mcpManager } from './mcp/manager.js';
 import { onLog } from './core/logger.js';
 import { feed, saveCredential } from './connectors.js';
+import { ALGO, TARGET_FOLLOWERS } from './core/algo.js';
+import { scoreVirality, VIRAL_QUALITY_FLOOR } from './core/viral.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -70,6 +72,9 @@ export function startServer(platforms, orchestrator) {
       ai: { provider: ai.provider, model: config.gemini.model, modelFast: config.openrouter.modelFast },
       growth: orchestrator.growth ? orchestrator.growth.analyze() : [],
       playbook: orchestrator.growth ? orchestrator.growth.playbook.slice(-5) : [],
+      momentum: orchestrator.viral ? orchestrator.viral.momentum() : null,
+      viral: orchestrator.viral ? orchestrator.viral.stats : null,
+      algo: { rules: ALGO, target: TARGET_FOLLOWERS },
       running: !!orchestrator.timer,
     });
   });
@@ -192,6 +197,23 @@ export function startServer(platforms, orchestrator) {
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
     }
+  });
+
+  // ---- Virality endpoints ---------------------------------------------
+  api.post('/viral/generate', async (req, res) => {
+    const { platform = 'x', topic, tone } = req.body || {};
+    try {
+      const post = await orchestrator.content.generateForPlatform(platform, topic || null, tone || store.state.settings.tone, { winners: orchestrator.growth.bestTopicsFor(platform, 2) });
+      res.json({ ok: true, platform, post, virality: post.virality, algo: ALGO[platform] || ALGO.x });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  api.post('/viral/score', (req, res) => {
+    const { text, platform = 'x' } = req.body || {};
+    if (!text) return res.status(400).json({ ok: false, error: 'text required' });
+    res.json({ ok: true, platform, score: scoreVirality({ text }, platform), floor: VIRAL_QUALITY_FLOOR });
   });
 
   app.use('/api', api);

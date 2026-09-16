@@ -7,6 +7,7 @@ import { Planner } from './planner.js';
 import { Scheduler } from './scheduler.js';
 import { GoalTracker } from './goals.js';
 import { GrowthEngine } from '../core/growth.js';
+import { viralEngine, scoreVirality, VIRAL_QUALITY_FLOOR } from '../core/viral.js';
 
 export class Orchestrator {
   constructor(platforms) {
@@ -16,8 +17,11 @@ export class Orchestrator {
     this.scheduler = new Scheduler(store, platforms, this.content);
     this.goals = new GoalTracker(store);
     this.growth = new GrowthEngine(platforms);
+    this.viral = viralEngine;
+    this.viral.platforms = platforms;
     this.timer = null;
     this.busy = false;
+    this._ampQueue = []; // non-blocking amplified posts, one batch per cycle
   }
 
   start() {
@@ -62,6 +66,7 @@ export class Orchestrator {
         agent.lastThinking = { ...agent.lastThinking, fallback: true };
       }
       await this._execute(actions);           // 3. act
+      await this._amplifyWinners();           // 3b. spread winning posts to other platforms
       await this.scheduler.enqueueDaily();    // 4. plan tomorrow
       await this.scheduler.processDue();      // 5. fire due posts
       this.growth.learnFromPosts(this._postsAddedThisCycle(agent.cycles)); // learn winners
@@ -69,6 +74,7 @@ export class Orchestrator {
 
       agent.status = 'idle';
       agent.lastCycle = Date.now();
+      agent.momentum = this.viral.momentum();
       store.pushActivity({ level: 'success', source: 'agent', message: `Cycle #${agent.cycles} complete.` });
     } catch (e) {
       error('agent', `cycle failed: ${e.stack || e.message}`);
@@ -150,16 +156,18 @@ export class Orchestrator {
         } else if (a.type === 'post' && store.state.settings.autoPost) {
           const post = a.post
             ? a.post
-            : await this.content.generateForPlatform(a.platform, a.topic || null, store.state.settings.tone);
+            : await this.content.generateForPlatform(a.platform, a.topic || null, store.state.settings.tone, { winners: this.growth.bestTopicsFor(a.platform, 2) });
           const res = await p.publish(post, {});
-          const gain = res.followersGained ?? (res.via === 'sim' ? 0 : Math.max(0, Math.floor(Math.random() * 14) + 3));
-          store.addPost({ platform: a.platform, text: post.text, result: res, via: res.via, cycle: store.state.agent.cycles, gain });
+          const rawGain = res.followersGained ?? (res.via === 'sim' ? 0 : Math.max(0, Math.floor(Math.random() * 14) + 3));
+          const simAdjusted = res.via === 'sim' ? rawGain : 0; // sim engine already bumped followers
+          store.addPost({ platform: a.platform, text: post.text, virality: post.virality ?? scoreVirality(post, a.platform), result: res, via: res.via, cycle: store.state.agent.cycles, gain: rawGain });
           const st = store.platform(a.platform);
-          if (res.via !== 'sim') { st.posts = (st.posts || 0) + 1; st.followers = (st.followers || 0) + gain; }
-          st.lastGain = gain;
+          if (res.via === 'rest' || res.via === 'mcp') { st.posts = (st.posts || 0) + 1; st.followers = (st.followers || 0) + rawGain; }
+          st.lastGain = rawGain;
           st.lastPost = new Date().toISOString();
-          store.pushActivity({ level: 'success', source: a.platform, message: `Posted: "${post.text.slice(0, 70)}" (+${gain} followers)` });
-          info('agent', `posted on ${a.platform} (+${gain})`);
+          this._maybeQueueAmplification(a.platform, post, res, rawGain);
+          store.pushActivity({ level: 'success', source: a.platform, message: `Posted: "${post.text.slice(0, 70)}" (+${rawGain} followers, v=${post.virality ?? 'n/a'})` });
+          info('agent', `posted on ${a.platform} (+${rawGain})`);
         }
         await new Promise((r) => setTimeout(r, 2500));
       } catch (e) {
@@ -173,21 +181,63 @@ export class Orchestrator {
     return posts.map((p) => ({ platform: p.platform, text: p.text }));
   }
 
+  /** When a post clears the virality bar, queue it for cross-platform spreading. */
+  _maybeQueueAmplification(platform, post, res, gain) {
+    const v = post.virality ?? scoreVirality(post, platform);
+    const pub = { platform, text: post.text, hashtags: post.hashtags, cta: post.cta, title: post.title, virality: v, gain };
+    if (v >= (config.viral.qualityFloor + 12) && gain > 0) this._ampQueue.push(pub);
+  }
+
+  /** Amplify up to N winners to other platforms this cycle (throttled per platform). */
+  async _amplifyWinners() {
+    if (!config.viral.ampOn) return;
+    const winners = this._ampQueue.splice(0, config.viral.maxAmpPerCycle);
+    if (!winners.length) return;
+    for (const win of winners) {
+      if (!win.id) win.id = `${win.platform}-${Date.now()}`;
+      const res = await this.viral.amplifyWinner(win);
+      if (!res.length) continue;
+      // carry at most 3 targets per winner to respect cadence
+      for (const name of res.slice(0, 3)) {
+        if (!store.state.settings.autoPost || this._ampBlocked(name)) continue;
+        try {
+          const adapted = await this.content.generateForPlatform(name, null, store.state.settings.tone, { sourcePost: win, winners: this.growth.bestTopicsFor(name, 2) });
+          const outp = await this.platforms[name].publish(adapted, {});
+          const gain = outp.followersGained ?? 0;
+          store.addPost({ platform: name, text: adapted.text, virality: adapted.virality, ampOf: adapted.ampOf || win.id, result: outp, via: outp.via, cycle: store.state.agent.cycles, gain });
+          const st = store.platform(name);
+          if (outp.via === 'rest' || outp.via === 'mcp') { st.posts = (st.posts || 0) + 1; st.followers = (st.followers || 0) + gain; }
+          st.lastGain = gain;
+          st.lastPost = new Date().toISOString();
+          store.pushActivity({ level: 'success', source: name, message: `Amplified winning post (from ${win.platform}) → ${name} (+${gain} followers)` });
+          await new Promise((r) => setTimeout(r, 2500));
+        } catch (e) {
+          warn('amp', `${name} amplification failed: ${e.message}`);
+        }
+      }
+    }
+  }
+
+  _ampBlocked(name) {
+    const st = store.platform(name);
+    return (st.posts || 0) > 0 && store.state.posts.some((p) => p.platform === name && p.ampOf && Date.now() - p.ts < 7200000);
+  }
+
   async composeAndPost({ platform, text, topic, schedule }) {
     const p = this.platforms[platform];
     if (!p) throw new Error(`unknown platform ${platform}`);
-    const post = text ? { text } : await this.content.generateForPlatform(platform, topic || null, store.state.settings.tone);
+    const post = text ? { text, virality: scoreVirality({ text }, platform) } : await this.content.generateForPlatform(platform, topic || null, store.state.settings.tone, { winners: this.growth.bestTopicsFor(platform, 2) });
     if (schedule) {
       const when = new Date(schedule);
-      this.scheduler.queue.push({ ts: when.getTime(), platform, text: post.text, hashtags: post.hashtags, title: post.title, reason: 'manual' });
+      this.scheduler.queue.push({ ts: when.getTime(), platform, text: post.text, hashtags: post.hashtags, title: post.title, virality: post.virality, reason: 'manual' });
       store.pushActivity({ level: 'info', source: 'scheduler', message: `Scheduled ${platform} post for ${when.toLocaleString()}` });
-      return { scheduled: when.toISOString(), platform };
+      return { scheduled: when.toISOString(), platform, virality: post.virality };
     }
     const res = await p.publish(post, {});
     const gain = res.followersGained ?? (res.via === 'sim' ? 0 : Math.max(0, Math.floor(Math.random() * 14) + 3));
-    store.addPost({ platform, text: post.text, result: res, via: res.via, cycle: store.state.agent.cycles, gain });
+    store.addPost({ platform, text: post.text, virality: post.virality ?? scoreVirality(post, platform), result: res, via: res.via, cycle: store.state.agent.cycles, gain });
     const st = store.platform(platform);
-    if (res.via !== 'sim') { st.posts = (st.posts || 0) + 1; st.followers = (st.followers || 0) + gain; }
+    if (res.via === 'rest' || res.via === 'mcp') { st.posts = (st.posts || 0) + 1; st.followers = (st.followers || 0) + gain; }
     st.lastGain = gain;
     st.lastPost = new Date().toISOString();
     store.pushActivity({ level: 'success', source: platform, message: `Posted: "${post.text.slice(0, 70)}" (+${gain} followers)` });

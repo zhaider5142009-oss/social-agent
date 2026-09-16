@@ -9,17 +9,17 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const defaultGoals = [
   {
     id: 'grow-followers',
-    title: 'Grow followers across all platforms',
+    title: 'Reach one million followers across all linked platforms',
     kpi: 'followers',
-    target: 10000,
+    target: 1000000,
     started: Date.now(),
     status: 'active',
     steps: [
-      { id: 's1', title: 'Post consistently (3-5x per week per platform)', done: false },
-      { id: 's2', title: 'Reply to every inbound message within one cycle', done: false },
-      { id: 's3', title: 'Publish AI+human curated content mix per platform best-practice', done: false },
-      { id: 's4', title: 'Cross-promote top performers across platforms', done: false },
-      { id: 's5', title: 'Track engagement analytics and double-down on winners', done: false },
+      { id: 's1', title: 'Run every post through the algorithm rulebook + virality scorer', done: false },
+      { id: 's2', title: 'Post at momentum frequency in each platform’s reward windows', done: false },
+      { id: 's3', title: 'Reply to every inbound message within one cycle (humanized)', done: false },
+      { id: 's4', title: 'Amplify winning posts across all other platforms', done: false },
+      { id: 's5', title: 'Track virality, learn winners, and double-down each cycle', done: false },
     ],
   },
 ];

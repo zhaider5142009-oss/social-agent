@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { scoreVirality } from '../core/viral.js';
 
 const FAN_NAMES = ['Alex Rivera', 'Mina Patel', 'Chris Okafor', 'Sofia Rossi', 'Dara Kim', 'Liam Novak', 'Aisha Bello', 'Tom Archer', 'Ella Fischer', 'Noah Carter'];
 const FAN_HANDLES = ['@alexr', '@minap', '@chriso', '@sofiar', '@darak', '@liamn', '@aishab', '@toma', '@ellaf', '@noahc'];
@@ -52,10 +53,15 @@ export class SimEngine {
     const st = this.seed();
     st.posts += 1;
     st.lastPost = new Date().toISOString();
-    const likes = Math.max(5, Math.round(st.followers * (0.02 + Math.random() * 0.05)));
+    const virality = typeof content?.virality === 'number'
+      ? content.virality
+      : scoreVirality(content || {}, this.name);
+    const heat = 1 + (virality / 100) * 2.2;             // viral content compounds faster
+    const reach = st.followers * (0.02 + Math.random() * 0.05) * heat;
+    const likes = Math.max(5, Math.round(reach));
     st.likes += likes;
-    const gained = this.bumpFollowers();
-    return { ok: true, postId: `${this.name}-${Date.now()}`, likes, followersGained: gained };
+    const gained = this.bumpFollowers(Math.round(virality * st.followers * 0.00035));
+    return { ok: true, via: 'sim', postId: `${this.name}-${Date.now()}`, virality, likes, followersGained: gained };
   }
 
   inbox(count = 1) {

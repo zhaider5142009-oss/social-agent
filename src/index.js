@@ -7,6 +7,9 @@ import { startServer } from './server.js';
 import { info, warn } from './core/logger.js';
 
 await store.load();
+// Apply the million-follower target from config (user can override in Settings UI).
+store.state.settings.target = config.viral.target;
+store.state.goals[0].target = config.viral.target;
 // Preserve persisted platform rows across restarts; only seed truly-missing ones below.
 
 mcpManager.load();
