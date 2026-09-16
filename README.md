@@ -1,8 +1,39 @@
 # Social Agent — Autonomous AI Social Media Manager
 
 An autonomous agent that manages your entire social presence across **11 platforms** — posting,
-replying, and growing followers — powered by a **deep-reasoning OpenRouter brain**, working
-**MCP connectors**, REST adapters, and a clean white web UI.
+replying, and growing followers — powered by an **AI brain (Gemini + OpenRouter)** that replies to
+messages in an **extremely human way** and uses **growth intelligence** to win followers on every
+platform.
+
+## The ultimate goal
+
+**Reply to every message through AI with an extreme human touch, and grow followers through AI
+intelligence** — all from one ChatGPT-style control room.
+
+- The **Extreme Humanizer** reads each inbound message, understands the sender's energy, and writes
+  a reply that reads like a real person wrote it — contractions, natural rhythm, empathy, curiosity,
+  one thoughtful follow-up question, zero bot phrases (`happy to help`, `hope this helps`, `as an AI`…).
+  Every draft passes an AI-tell scrub and a second-pass "human audit." If the API is down, a local
+  fallback library still answers warmly.
+- The **Growth Intelligence engine** scores every platform after each cycle, double-downs on the
+  ones compounding (LinkedIn > Telegram > Discord-style rankings), and **learns a playbook** of which
+  content actually gained followers, so future posts lean into winners.
+
+## ChatGPT-style UI
+
+The web UI is modeled after ChatGPT: a collapsible dark sidebar with all features:
+
+- **Dashboard** — KPIs, composer (post now / all platforms), recent posts, platform health.
+- **Connectors** — every platform connector shows its **specific task** and **function**, live
+  mode (`sim`/`rest`/`mcp`), a form with the exact credentials it needs (with links to get them),
+  **Save** and **Test** buttons. Connect any connector right from the sidebar.
+- **Inbox** — live incoming messages on all platforms; each has **Send** and an **✨ AI** button
+  that drafts a humanized reply for you to send.
+- **Brain & Thinking** — the agent's deep reasoning, plus a **humanizer test bench** to watch
+  extreme-human replies get written live.
+- **Growth Intel** — platform scores and the learned playbook.
+- **Activity Log** — everything the agent did, via live SSE.
+- **Settings** — niche, tone, follower target, auto toggles, AI provider status.
 
 ## Platforms covered (MCP-first)
 
@@ -27,12 +58,13 @@ fully functional out of the box.
 ## What the agent does on every brain cycle
 
 1. **Observe** — pulls metrics + inbox from all 11 platforms.
-2. **Deep reason** — a planning LLM reads total followers, per-platform state, unread inbox,
-   goals and the skills library, then returns a step-by-step action plan with reasoning.
-3. **Act** — executes auto-replies (AI-crafted, platform-aware) and posts, one at a time, with
-   rate limiting, retries with backoff, and a circuit breaker.
+2. **Deep reason** — a planning LLM reads total followers, per-platform state, unread inbox, goals
+   and the skills library, then returns an action plan with reasoning.
+3. **Act** — executes **humanized auto-replies** and posts chosen by the **growth engine**, one at
+   a time, with rate limiting and a circuit breaker.
 4. **Plan tomorrow** — a scheduler queues platform best-practice posts (timing-aware).
-5. **Reflect** — updates goal progress and adapts.
+5. **Learn** — records which posts gained followers into the playbook.
+6. **Reflect** — updates goal progress and adapts.
 
 On first launch it posts a "seed bolt" to every platform so the dashboard is instantly alive.
 
@@ -41,14 +73,19 @@ On first launch it posts a "seed bolt" to every platform so the dashboard is ins
 ```bash
 # Prereq: Node.js 20.6+
 npm install
-cp .env.example .env   # edit creds as needed
+cp .env.example .env   # add your GEMINI_API_KEY and/or OPENROUTER_API_KEY + platform creds
 npm start
 # open http://localhost:3000
 ```
 
-The OpenRouter API key is already in your `.env`. The account's remaining credit is small, so the
-agent keeps `max_tokens` low and retries/backoff automatically. Add credits at
-https://openrouter.ai/settings/credits for higher ceilings.
+### AI providers
+
+- **Gemini (default)** — put your key in `GEMINI_API_KEY`. The agent tries `GEMINI_MODEL`
+  (default `gemini-3.6-flash`) and automatically falls back through a chain of flash models if a
+  model is rate-limited or overloaded (429/503), so replies keep flowing.
+- **OpenRouter** — set `OPENROUTER_API_KEY` for the deep-reasoning planner. Low-balance accounts
+  trigger an automatic fallback engine that keeps the agent active (steady cadence posts +
+  growth-engine replies) — the agent never goes inert.
 
 ## Connecting a real MCP server
 
@@ -76,15 +113,11 @@ falls back to REST/simulation automatically.
 
 ## REST mode (no MCP needed)
 
-Fill tokens in `.env` (e.g. `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN`, `REDDIT_CLIENT_ID`+`SECRET`,
+Fill tokens from the **Connectors** tab in the UI (it saves them to `.env`), or edit `.env`
+directly (e.g. `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN`, `REDDIT_CLIENT_ID`+`SECRET`,
 `X_API_KEY`+`X_API_SECRET`, `WHATSAPP_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`, `LINKEDIN_ACCESS_TOKEN`,
-`YOUTUBE_API_KEY`, `TIKTOK_ACCESS_TOKEN`, `PATREON_ACCESS_TOKEN`). Connectors auto-promote to local.
-
-## UI
-
-Clean white dashboard: KPIs, live brain-thinking panel, per-platform cards, inbox with one-click
-AI replies, composer (single or all platforms), goals with progress steps, live activity feed
-(SSE), and settings (niche, tone, target, auto toggles).
+`YOUTUBE_API_KEY`, `TIKTOK_ACCESS_TOKEN`, `PATREON_ACCESS_TOKEN`). Connectors auto-promote to
+REST mode when credentials are present.
 
 ## Project structure
 
@@ -92,7 +125,13 @@ AI replies, composer (single or all platforms), goals with progress steps, live 
 src/
   index.js                 entrypoint
   config.js                env config
-  core/                    logger, JSON store, OpenRouter client (queue/retry/breaker)
+  connectors.js            connector catalog (task, function, creds, dev-portal links)
+  core/
+    logger.js              logging + activity feed
+    store.js               JSON store (persisted to data/state.json)
+    ai.js                  AI client (Gemini + OpenRouter, queue/retry/model-chain breaker)
+    humanizer.js           ★ extreme humanizer — replies that read like a real person
+    growth.js              ★ growth intelligence — scores, posting plan, learned playbook
   mcp/                     stdio + HTTP MCP clients, manager
   platforms/               base connector + 11 platform adapters + sim engine
   agent/
@@ -102,7 +141,7 @@ src/
     scheduler.js           best-time queue + first-run seed
     goals.js               KPI goal tracking
   server.js                Express + REST + SSE
-public/                    white UI (HTML/CSS/JS)
+public/                    ChatGPT-style dark UI (HTML/CSS/JS)
 skills/                    markdown skill library injected into the planner
 data/state.json            persisted state (created at runtime)
 ```
@@ -111,6 +150,7 @@ data/state.json            persisted state (created at runtime)
 
 - Simulation mode produces realistic followers, engagement and inbound fan messages so you can
   watch the entire agent loop work without any accounts.
-- To go fully live, add one platform's credentials at a time and watch the UI badge switch from
-  `sim` → `rest` (or `mcp`).
-- Never commit `.env` to source control; rotate the key if it was ever shared publicly.
+- To go fully live, connect one platform at a time from the **Connectors** tab and watch the mode
+  badge switch from `sim` → `rest` (or `mcp`).
+- Never commit `.env` to source control; rotate any key that was ever shared publicly. The
+  `.env.example` ships with placeholders only.
