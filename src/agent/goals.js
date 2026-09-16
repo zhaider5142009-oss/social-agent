@@ -19,7 +19,7 @@ export class GoalTracker {
           { id: 's2', cond: () => totals.replies >= 20 },
           { id: 's3', cond: () => Object.entries(this.store.state.platforms).every(([, p]) => p.posts >= 3) || Object.entries(this.store.state.platforms).filter(([, p]) => p.posts > 0).length >= 8 },
           { id: 's4', cond: () => totals.followers >= goal.target * 0.5 },
-          { id: 's5', cond: () => typeof this.store.state.settings.analyticsTouched === 'number' },
+          { id: 's5', cond: () => Object.values(this.store.state.platforms).some((p) => p.likes > 0) },
         ];
         for (const t of thresholds) {
           const step = goal.steps.find((x) => x.id === t.id);

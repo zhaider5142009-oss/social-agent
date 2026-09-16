@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'node:path';
 import http from 'node:http';
+import { exec } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { store } from './core/store.js';
@@ -18,9 +19,10 @@ export function startServer(platforms, orchestrator) {
 
   const sseClients = new Set();
 
-  const platformMeta = Object.fromEntries(
-    Object.entries(platforms).map(([name, p]) => [name, { label: p.label, handle: p.handle, tools: p.mcpTools().map((t) => t.name), mode: p.mode() }]),
-  );
+  const platformMeta = () =>
+    Object.fromEntries(
+      Object.entries(platforms).map(([name, p]) => [name, { label: p.label, handle: p.handle, tools: p.mcpTools().map((t) => t.name), mode: p.mode() }]),
+    );
 
   app.get('/api/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -61,13 +63,14 @@ export function startServer(platforms, orchestrator) {
         lastThinking: store.state.agent.lastThinking,
       },
       mcp: { platforms: Object.keys(store.state.platforms), connected: mcpManager.connected },
-      platformMeta,
+      platformMeta: platformMeta(),
       aiUsage: ai.stats(),
       running: !!orchestrator.timer,
     });
   });
 
   api.get('/platforms', (req, res) => {
+    const meta = platformMeta();
     res.json(
       Object.entries(platforms).map(([name, p]) => ({
         name,
@@ -81,8 +84,7 @@ export function startServer(platforms, orchestrator) {
 
   api.post('/agent/cycle', async (req, res) => {
     const { manual } = req.body || {};
-    if (manual) store.state.settings.agentOn = true;
-    await orchestrator.runCycle();
+    await orchestrator.runCycle({ force: !!manual });
     res.json({ ok: true, status: store.state.agent.status });
   });
 
@@ -155,8 +157,25 @@ export function startServer(platforms, orchestrator) {
   app.use('/api', api);
 
   const server = http.createServer(app);
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n  [ERROR] Port ${config.port} is already in use.`);
+      console.error(`  Another Social Agent instance may already be running.`);
+      console.error(`  Close the other instance, or set PORT=<number> in .env\n`);
+      process.exit(1);
+    }
+    throw err;
+  });
   server.listen(config.port, () => {
-    console.log(`\n   SOCIAL AGENT running\n   open  http://localhost:${config.port}\n`);
+    const url = `http://localhost:${config.port}`;
+    console.log(`\n   SOCIAL AGENT running`);
+    console.log(`   open  ${url}\n`);
+    // Auto-open browser (best-effort, no crash if desktop env unavailable)
+    try {
+      if (process.platform === 'win32') exec(`start "" "${url}"`);
+      else if (process.platform === 'linux') exec(`xdg-open "${url}"`);
+      else exec(`open "${url}"`);
+    } catch {}
   });
   return server;
 }

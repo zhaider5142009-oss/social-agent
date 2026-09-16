@@ -4,10 +4,10 @@ import { mcpManager } from './mcp/manager.js';
 import { createPlatforms } from './platforms/index.js';
 import { Orchestrator } from './agent/orchestrator.js';
 import { startServer } from './server.js';
-import { info } from './core/logger.js';
+import { info, warn } from './core/logger.js';
 
 await store.load();
-store.state.platforms = {}; // connectors own fresh platform stat rows
+// Preserve persisted platform rows across restarts; only seed truly-missing ones below.
 
 mcpManager.load();
 mcpManager.connectAll().catch((e) => info('mcp', `connectAll issue: ${e.message}`));
@@ -31,5 +31,31 @@ const server = startServer(platforms, orchestrator);
 if (store.state.settings.agentOn) {
   orchestrator.start();
 }
+
+// Restore scheduler queue from previous run
+if (store.state.agent.scheduleQueue) {
+  orchestrator.scheduler.queue = store.state.agent.scheduleQueue;
+  store.state.agent.scheduleQueue = null;
+}
+
+// Persist scheduler queue + state on shutdown
+const shutdown = async () => {
+  info('agent', 'Shutting down...');
+  orchestrator.stop();
+  store.state.agent.scheduleQueue = orchestrator.scheduler.queue;
+  store.save();
+  mcpManager.closeAll();
+  server.close();
+  process.exit(0);
+};
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+process.on('uncaughtException', async (err) => {
+  console.error('[FATAL]', err);
+  await shutdown();
+});
+process.on('unhandledRejection', (err) => {
+  warn('agent', `Unhandled rejection: ${err?.message || err}`);
+});
 
 export { orchestrator, platforms, server };

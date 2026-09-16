@@ -38,14 +38,19 @@ export class XPlatform extends Platform {
     const headers = {};
     if (this.cred(null, 'xKey')) headers.Authorization = this._oauth1('POST', url, { text: content.text });
     else if (this.cred(null, 'xBearer')) headers.Authorization = `Bearer ${config.creds.xBearer}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: content.text }),
-    }).catch((e) => ({ ok: false, raw: e.message }));
-    if (res.ok !== undefined) return res;
-    const data = await res.json();
-    return { ok: !!data.data?.id, postId: data.data?.id, raw: data };
+    const body = { text: content.text };
+    if (content.in_reply_to) body.reply = { in_reply_to_tweet_id: content.in_reply_to };
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok && !!data.data?.id, postId: data.data?.id, raw: data };
+    } catch (e) {
+      return { ok: false, raw: e.message };
+    }
   }
 
   restInbox() {

@@ -102,6 +102,7 @@ export class Store {
   addPost(post) {
     const item = { id: crypto.randomUUID(), ts: Date.now(), ...post };
     this.state.posts.unshift(item);
+    if (this.state.posts.length > 500) this.state.posts.length = 500;
     return item;
   }
 

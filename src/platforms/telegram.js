@@ -39,7 +39,7 @@ export class TelegramPlatform extends Platform {
           from: u.message.from?.first_name + (u.message.from?.last_name ? ' ' + u.message.from.last_name : ''),
           handle: u.message.from?.username ? '@' + u.message.from.username : '',
           text: u.message.text,
-          threadId: String(u.update_id),
+          threadId: String(u.message.message_id),
         }));
     });
   }

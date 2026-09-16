@@ -35,9 +35,10 @@ export class Orchestrator {
     info('agent', 'orchestrator stopped');
   }
 
-  async runCycle() {
+  async runCycle(opts = {}) {
+    const { force = false } = opts;
     if (this.busy) { info('agent', 'cycle skipped (busy)'); return; }
-    if (!store.state.settings.agentOn) return;
+    if (!force && !store.state.settings.agentOn) return;
     this.busy = true;
     const agent = store.state.agent;
     agent.status = 'thinking';
@@ -54,7 +55,11 @@ export class Orchestrator {
       agent.lastThinking = { thinking: plan.thinking, actions: plan.actions, context: plan.context, ts: Date.now() };
       store.pushActivity({ level: 'info', source: 'brain', message: plan.thinking });
 
-      await this._execute(plan.actions);      // 3. act
+      const actions = plan.actions?.length ? plan.actions : this._fallbackActions(); // stay alive even offline
+      if (actions.length && plan.actions?.length === 0) {
+        agent.lastThinking = { ...agent.lastThinking, fallback: true };
+      }
+      await this._execute(actions);           // 3. act
       await this.scheduler.enqueueDaily();    // 4. plan tomorrow
       await this.scheduler.processDue();      // 5. fire due posts
       this.goals.update();                    // 6. reflect on goals
@@ -87,7 +92,7 @@ export class Orchestrator {
         st.connected = st.mode === 'sim' ? true : !!p.hasCredentials();
 
         for (const item of (inbox?.items || []).filter((i) => i.text)) {
-          const exists = store.state.inbox.some((m) => m.platform === name && m.text === item.text);
+          const exists = store.state.inbox.some((m) => m.platform === name && (m.threadId === item.threadId || (m.text === item.text && m.from === item.from)));
           if (!exists) {
             store.addInbox({ platform: name, from: item.from, handle: item.handle, text: item.text, threadId: item.threadId });
             info('inbox', `${name}: new message from ${item.from}: "${item.text.slice(0, 60)}"`);
@@ -98,6 +103,30 @@ export class Orchestrator {
       }
     });
     await Promise.all(jobs);
+  }
+
+  /** When AI is unavailable/out-of-credits, keep the agent active with sane defaults. */
+  _fallbackActions() {
+    const s = store.state.settings;
+    const actions = [];
+    if (s.autoReply) {
+      for (const m of store.state.inbox.filter((x) => x.status === 'new').slice(0, 2)) {
+        actions.push({ type: 'reply', platform: m.platform, messageId: m.id, reason: 'fallback: auto-answering pending message' });
+      }
+    }
+    if (s.autoPost) {
+      const postedToday = new Map();
+      for (const p of store.state.posts) {
+        if (Date.now() - p.ts < 86400000) postedToday.set(p.platform, (postedToday.get(p.platform) || 0) + 1);
+      }
+      for (const [name, pl] of Object.entries(this.platforms)) {
+        if ((postedToday.get(name) || 0) < 1) {
+          actions.push({ type: 'post', platform: name, topic: null, reason: 'fallback: steady cadence post' });
+          break;
+        }
+      }
+    }
+    return actions;
   }
 
   async _execute(actions) {
@@ -174,6 +203,10 @@ export class Orchestrator {
 }
 
 import { onLog } from '../core/logger.js';
+const USER_FACING = new Set(['agent', 'brain', 'scheduler', 'inbox', 'goal']);
 onLog((entry) => {
-  store.pushActivity({ level: entry.level, source: entry.source, message: entry.message });
+  // Surface only meaningful events in the activity feed; keep AI plumbing noise out.
+  if (entry.level === 'error' || entry.level === 'success' || USER_FACING.has(entry.source)) {
+    store.pushActivity({ level: entry.level, source: entry.source, message: entry.message });
+  }
 });

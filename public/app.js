@@ -50,7 +50,7 @@ function renderThinking(d) {
   }
   const t = d.agent.lastThinking;
   const actions = (t.actions || [])
-    .map((a) => `<li>${a.type.toUpperCase()} → <b>${a.platform}</b> · ${escapeHtml(a.topic || '')}<div class="reason">${escapeHtml(a.reason || '')}</div></li>`)
+    .map((a) => `<li>${escapeHtml((a.type || '').toUpperCase())} → <b>${escapeHtml(a.platform || '')}</b> · ${escapeHtml(a.topic || '')}<div class="reason">${escapeHtml(a.reason || '')}</div></li>`)
     .join('');
   box.classList.add('done');
   box.innerHTML = `<div style="font-weight:600;margin-bottom:6px">Deep reasoning:</div>${escapeHtml(t.thinking)}${actions ? `<ul style="margin:10px 0 0;padding-left:18px">${actions}</ul>` : ''}`;
@@ -79,12 +79,13 @@ function renderGoals(d) {
   const goals = d.goals || [];
   if (!goals.length) { $('goalsBox').innerHTML = '<div class="empty">No goals yet.</div>'; return; }
   $('goalsBox').innerHTML = goals.map((g) => {
-    const pct = Math.min(100, Math.round(((g.progress ?? 0) / (g.target ? 100 : 1))));
-    const shown = g.target ? Math.round(g.progress ?? 0) : 0;
+    const raw = g.target ? Math.round(g.progress ?? 0) : 0;
+    const shown = Math.min(100, raw);
+    const label = raw >= 100 ? 'goal reached!' : `${shown}% · ${g.status}`;
     const steps = (g.steps || []).map((s) => `<li class="${s.done ? 'done' : ''}">${escapeHtml(s.title)}</li>`).join('');
     return `<div class="goal">
-      <div class="g-head"><div class="g-title">${escapeHtml(g.title)}</div><div class="g-progress">${shown}% · ${g.status}</div></div>
-      <div class="progress"><div style="width:${Math.min(100, shown)}%"></div></div>
+      <div class="g-head"><div class="g-title">${escapeHtml(g.title)}</div><div class="g-progress">${label}</div></div>
+      <div class="progress"><div style="width:${shown}%"></div></div>
       <ul class="g-steps">${steps}</ul>
     </div>`;
   }).join('');
@@ -127,8 +128,11 @@ function renderAll(d) {
   pill.className = 'status-pill ' + st;
   $('toggleBtn').textContent = d.running ? 'Pause agent' : 'Start agent';
   const platSel = $('postPlatform');
-  if (platSel.options.length === 0 && d.platforms) {
-    platSel.innerHTML = Object.keys(d.platforms).map((n) => `<option>${n}</option>`).join('');
+  const current = platSel.value;
+  if (d.platforms) {
+    const keys = Object.keys(d.platforms);
+    platSel.innerHTML = keys.map((n) => `<option value="${n}">${n}</option>`).join('');
+    if (current && keys.includes(current)) platSel.value = current;
   }
 }
 
@@ -136,49 +140,53 @@ async function refresh() {
   try { renderAll(await fetchJson('/api/state')); } catch (e) { console.error(e); }
 }
 
+async function postAction(url, body) {
+  const r = await fetchJson(url, { method: 'POST', body: JSON.stringify(body) });
+  refresh();
+  return r;
+}
+
 function setup() {
   $('cycleBtn').addEventListener('click', async () => {
     $('cycleBtn').disabled = true;
-    await fetchJson('/api/agent/cycle', { method: 'POST', body: JSON.stringify({ manual: true }) });
+    try { await postAction('/api/agent/cycle', { manual: true }); } catch (e) { console.error(e); }
     $('cycleBtn').disabled = false;
     refresh();
   });
 
   $('toggleBtn').addEventListener('click', async () => {
-    await fetchJson('/api/agent/toggle', { method: 'POST' });
+    try { await postAction('/api/agent/toggle', {}); } catch (e) { console.error(e); }
     refresh();
   });
 
   $('postBtn').addEventListener('click', async () => {
-    await fetchJson('/api/post', {
-      method: 'POST',
-      body: JSON.stringify({ platform: $('postPlatform').value, text: $('postText').value, topic: $('postTopic').value }),
-    });
+    if (!$('postText').value.trim()) return;
+    $('postBtn').disabled = true;
+    try { await postAction('/api/post', { platform: $('postPlatform').value, text: $('postText').value, topic: $('postTopic').value }); } catch (e) { console.error(e); }
     $('postText').value = '';
+    $('postBtn').disabled = false;
     refresh();
   });
 
   $('postAllBtn').addEventListener('click', async () => {
-    await fetchJson('/api/post-all', {
-      method: 'POST',
-      body: JSON.stringify({ text: $('postText').value, topic: $('postTopic').value }),
-    });
+    if (!$('postText').value.trim()) return;
+    $('postAllBtn').disabled = true;
+    try { await postAction('/api/post-all', { text: $('postText').value, topic: $('postTopic').value }); } catch (e) { console.error(e); }
     $('postText').value = '';
+    $('postAllBtn').disabled = false;
     refresh();
   });
 
   $('saveSettings').addEventListener('click', async () => {
-    await fetchJson('/api/settings', {
-      method: 'POST',
-      body: JSON.stringify({
-        niche: $('setNiche').value,
-        tone: $('setTone').value,
-        target: Number($('setTarget').value) || undefined,
-        autoPost: $('setAutoPost').checked,
-        autoReply: $('setAutoReply').checked,
-      }),
-    });
-    refresh();
+    $('saveSettings').disabled = true;
+    try { await postAction('/api/settings', {
+      niche: $('setNiche').value,
+      tone: $('setTone').value,
+      target: Number($('setTarget').value) || undefined,
+      autoPost: $('setAutoPost').checked,
+      autoReply: $('setAutoReply').checked,
+    }); } catch (e) { console.error(e); }
+    $('saveSettings').disabled = false;
   });
 
   $('inboxBox').addEventListener('click', async (ev) => {
@@ -187,7 +195,9 @@ function setup() {
     const row = btn.closest('.msg');
     const input = row.querySelector('input');
     if (!input.value.trim()) return;
-    await fetchJson('/api/reply/' + row.dataset.id, { method: 'POST', body: JSON.stringify({ text: input.value }) });
+    btn.disabled = true;
+    try { await postAction('/api/reply/' + row.dataset.id, { text: input.value }); } catch (e) { console.error(e); }
+    btn.disabled = false;
     refresh();
   });
 

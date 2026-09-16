@@ -34,12 +34,14 @@ export class DiscordPlatform extends Platform {
     return this._api('GET', `/channels/${channelId}/messages?limit=25`)
       .then((r) => r.json())
       .then((msgs) =>
-        (msgs || []).map((m) => ({
-          from: m.author?.username || 'unknown',
-          handle: m.author?.id ? `<@${m.author.id}>` : '',
-          text: m.content,
-          threadId: m.id,
-        })),
+        (msgs || [])
+          .filter((m) => !m.author?.bot && m.content)
+          .map((m) => ({
+            from: m.author?.username || 'unknown',
+            handle: m.author?.id ? `<@${m.author.id}>` : '',
+            text: m.content,
+            threadId: m.id,
+          })),
       )
       .catch(() => []);
   }

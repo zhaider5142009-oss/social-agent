@@ -93,7 +93,16 @@ class Ai {
     if (json) body.response_format = { type: 'json_object' };
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), signal ? 0 : DEFAULT_TIMEOUT);
+    const timeout = signal ? 0 : DEFAULT_TIMEOUT;
+    const timer = timeout ? setTimeout(() => controller.abort(), timeout) : null;
+
+    let fetchSignal;
+    if (signal) {
+      this.signal = signal;
+      fetchSignal = signal;
+    } else {
+      fetchSignal = controller.signal;
+    }
 
     let res;
     try {
@@ -106,16 +115,16 @@ class Ai {
           'X-Title': 'Social Agent',
         },
         body: JSON.stringify(body),
-        signal: signal || controller.signal,
+        signal: fetchSignal,
       });
     } catch (e) {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       error('ai', `OpenRouter request failed: ${e.message}`);
       this._noteFailure();
       this.fallbackCount += 1;
       return json ? this._heuristicJson(system, user) : this._heuristicText(system, user);
     }
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');

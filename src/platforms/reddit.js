@@ -12,7 +12,7 @@ export class RedditPlatform extends Platform {
   }
 
   hasCredentials() {
-    return !!(this.cred(null, 'redditId') && this.cred(null, 'redditSecret') && this.cred(null, 'redditUser'));
+    return !!(this.cred(null, 'redditId') && this.cred(null, 'redditSecret') && this.cred(null, 'redditUser') && this.cred(null, 'redditPass'));
   }
 
   async _auth() {

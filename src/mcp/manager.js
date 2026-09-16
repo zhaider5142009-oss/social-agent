@@ -85,6 +85,14 @@ export class MCPManager {
     return this.client(platform)?.listTools() ?? [];
   }
 
+  closeAll() {
+    for (const [, c] of this.servers) {
+      try { c.close(); } catch {}
+    }
+    this.servers.clear();
+    this.connected = [];
+  }
+
   async call(platform, tool, args = {}) {
     const c = this.client(platform);
     if (!c) throw new Error(`no MCP server for ${platform}`);
