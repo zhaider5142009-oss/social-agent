@@ -1,6 +1,8 @@
 import { ai } from '../core/ai.js';
 import { config } from '../config.js';
+import { store } from '../core/store.js';
 import { info, warn } from '../core/logger.js';
+import { humanizeReply } from '../core/humanizer.js';
 
 const PLATFORM_RULES = {
   x: 'Short, sharp, thread-friendly; 1-2 lines max; punchy hook; 1-3 hashtags.',
@@ -59,7 +61,18 @@ Write the post now. Keep it human, not robotic. Keep "text" under 1200 character
     return { text: fallback, hashtags: ['#' + fallback.split(' ').pop().replace(/\W/g, '')], cta: null, title: null };
   }
 
-  async generateReply(message, tone, sender) {
+  async generateReply(message, tone, sender, opts = {}) {
+    // Extreme humanization path (preferred)
+    try {
+      const h = await humanizeReply(
+        { text: message },
+        { platform: opts.platform, tone, sender, niche: store.state?.settings?.niche },
+      );
+      return h.reply;
+    } catch (e) {
+      warn('content', `humanizer failed, using AI chat reply (${e.message})`);
+    }
+
     const sys = `You are the auto-reply bot of a social media brand with tone: ${tone}.
 Return JSON: {"reply":"one warm, on-brand answer","doFollowUp":false}. Keep it under 40 words.`;
     const out = await ai.plan(sys, `Reply to ${sender || 'a follower'} who said: "${message}"`);

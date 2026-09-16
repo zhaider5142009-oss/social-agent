@@ -3,96 +3,185 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Social Agent — Autonomous Social Media Manager</title>
+  <title>Social Agent — AI Social Media Brain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">SA</div>
-      <div>
-        <h1>Social Agent</h1>
-        <p>Autonomous social media brain · 11 platforms</p>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="side-top">
+        <div class="brand">
+          <div class="logo">SA</div>
+          <div class="brand-txt">
+            <h1>Social Agent</h1>
+            <p>AI Management Brain</p>
+          </div>
+        </div>
+        <button class="side-toggle" id="sideToggle" title="Collapse sidebar">«</button>
       </div>
-    </div>
-    <div class="topbar-actions">
-      <div class="status-pill" id="agentStatus">idle</div>
-      <button class="btn btn-primary" id="cycleBtn">Run brain now</button>
-      <button class="btn" id="toggleBtn">Pause agent</button>
-    </div>
-  </header>
 
-  <main class="wrap">
-    <section class="kpis" id="kpis"></section>
+      <nav class="side-nav">
+        <button class="nav-item active" data-view="dashboard"><span class="nav-ico">◈</span> Dashboard</button>
+        <button class="nav-item" data-view="connectors"><span class="nav-ico">⌁</span> Connectors
+          <span class="nav-badge" id="connBadge" title="connected/total"></span>
+        </button>
+        <button class="nav-item" data-view="inbox"><span class="nav-ico">✉</span> Inbox
+          <span class="nav-badge warn" id="inboxBadge">0</span>
+        </button>
+        <button class="nav-item" data-view="brain"><span class="nav-ico">◎</span> Brain &amp; Thinking</button>
+        <button class="nav-item" data-view="growth"><span class="nav-ico">▲</span> Growth Intel</button>
+        <button class="nav-item" data-view="activity"><span class="nav-ico">≋</span> Activity Log</button>
+        <button class="nav-item" data-view="settings"><span class="nav-ico">⚙</span> Settings</button>
+      </nav>
 
-    <div class="grid">
-      <section class="card col-wide">
-        <div class="card-head">
-          <h2>Brain thinking</h2>
-          <span class="chip" id="cycleCount">cycle 0</span>
+      <div class="side-bottom">
+        <div class="ai-chip">
+          <span class="ai-dot" id="aiDot"></span>
+          <span id="aiLabel">AI: idle</span>
         </div>
-        <div id="thinkingBox" class="thinking-box">
-          <p class="muted">The agent is idle. Press "Run brain now" to start a deep-reasoning cycle.</p>
+        <div class="status-pill" id="agentStatus">idle</div>
+        <button class="side-action" id="toggleBtn">Start agent</button>
+        <button class="side-action" id="cycleBtn">Run brain now</button>
+        <div class="side-logo">SA · v2</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- ============ DASHBOARD ============ -->
+      <section class="view active" id="view-dashboard">
+        <div class="view-head">
+          <h2>Dashboard</h2>
+          <span class="head-sub">One brain, every platform, real-time</span>
         </div>
 
-        <div class="card-head mt">
-          <h2>Write a post</h2>
+        <div class="kpis" id="kpis"></div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Compose a post</h2>
+            <span class="chip" id="postModeChip">send now</span>
+          </div>
+          <div class="composer">
+            <textarea id="postText" rows="3" placeholder="Leave empty to let AI write one based on your niche…"></textarea>
+            <div class="composer-row">
+              <input id="postTopic" placeholder="Topic (optional) · 5 AI tools saving time" />
+              <select id="postPlatform"></select>
+              <button class="btn btn-primary" id="postBtn">Post now</button>
+              <button class="btn" id="postAllBtn">All platforms</button>
+            </div>
+          </div>
+          <div class="recent-head"><h2>Recent posts</h2></div>
+          <div id="postsList" class="posts"></div>
         </div>
-        <div class="composer">
-          <textarea id="postText" rows="3" placeholder="Leave empty to let AI write one based on your niche…"></textarea>
-          <input id="postTopic" placeholder="Topic (optional): 5 AI tools saving time" />
-          <div class="row">
-            <select id="postPlatform"></select>
-            <button class="btn btn-primary" id="postBtn">Post now</button>
-            <button class="btn" id="postAllBtn">Post to all</button>
+
+        <div class="card">
+          <div class="card-head"><h2>Platform health</h2></div>
+          <div class="platforms" id="platforms"></div>
+        </div>
+      </section>
+
+      <!-- ============ CONNECTORS ============ -->
+      <section class="view" id="view-connectors">
+        <div class="view-head">
+          <h2>Connectors</h2>
+          <span class="head-sub">Each platform has its own task + function · connect any of them</span>
+        </div>
+        <div id="connectors" class="connectors"></div>
+      </section>
+
+      <!-- ============ INBOX ============ -->
+      <section class="view" id="view-inbox">
+        <div class="view-head">
+          <h2>Inbox</h2>
+          <span class="head-sub">AI answers every message with an extreme human touch</span>
+        </div>
+        <div class="inbox" id="inboxBox"></div>
+      </section>
+
+      <!-- ============ BRAIN ============ -->
+      <section class="view" id="view-brain">
+        <div class="view-head">
+          <h2>Brain &amp; Thinking</h2>
+          <span class="head-sub">Deep reasoning, plans, and fallback intelligence</span>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Last thinking</h2><span class="chip" id="cycleCount">cycle 0</span></div>
+          <div id="thinkingBox" class="thinking-box">
+            <p class="muted">Agent idle — press "Run brain now" to start a cycle.</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Humanizer test bench</h2></div>
+          <div class="humanize-bench">
+            <textarea id="humInput" rows="2" placeholder='Try: "Hey, loved your last post about AI tools! How do you stay consistent?"'></textarea>
+            <select id="humPlatform"><option value="x">X</option><option value="instagram">Instagram</option><option value="telegram">Telegram</option><option value="discord">Discord</option><option value="reddit">Reddit</option><option value="whatsapp">WhatsApp</option><option value="linkedin">LinkedIn</option></select>
+            <button class="btn btn-primary" id="humBtn">Humanize a reply</button>
+            <div id="humOut" class="hum-out muted">The humanized reply appears here.</div>
           </div>
         </div>
       </section>
 
-      <section class="card">
-        <div class="card-head"><h2>Goals</h2></div>
-        <div id="goalsBox"></div>
-      </section>
-    </div>
-
-    <div class="grid">
-      <section class="card col-wide">
-        <div class="card-head"><h2>Platforms</h2></div>
-        <div class="platforms" id="platforms"></div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2>Inbox</h2>
-          <span class="chip" id="inboxCount">0 new</span>
+      <!-- ============ GROWTH ============ -->
+      <section class="view" id="view-growth">
+        <div class="view-head">
+          <h2>Growth Intelligence</h2>
+          <span class="head-sub">AI decides where to double-down to earn followers</span>
         </div>
-        <div id="inboxBox" class="inbox"></div>
+        <div class="card">
+          <div class="card-head"><h2>Platform scores</h2></div>
+          <div id="growthScores" class="growth-scores"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Learned playbook (what worked)</h2></div>
+          <div id="playbook" class="playbook"></div>
+        </div>
       </section>
-    </div>
 
-    <section class="card">
-      <div class="card-head"><h2>Activity</h2></div>
-      <div id="activity" class="activity"></div>
-    </section>
+      <!-- ============ ACTIVITY ============ -->
+      <section class="view" id="view-activity">
+        <div class="view-head">
+          <h2>Activity Log</h2>
+          <span class="head-sub">Everything the agent did, live</span>
+        </div>
+        <div id="activity" class="activity"></div>
+      </section>
 
-    <section class="card">
-      <div class="card-head"><h2>Settings</h2></div>
-      <div class="settings">
-        <label>Niche <input id="setNiche" placeholder="AI and technology" /></label>
-        <label>Tone
-          <select id="setTone">
-            <option>professional</option><option>friendly</option><option>bold</option><option>expert</option>
-          </select>
-        </label>
-        <label>Follower target <input id="setTarget" type="number" /></label>
-        <label class="check"><input id="setAutoPost" type="checkbox" /> Auto post</label>
-        <label class="check"><input id="setAutoReply" type="checkbox" /> Auto reply</label>
-        <button class="btn" id="saveSettings">Save</button>
-      </div>
-    </section>
-  </main>
+      <!-- ============ SETTINGS ============ -->
+      <section class="view" id="view-settings">
+        <div class="view-head">
+          <h2>Settings</h2>
+          <span class="head-sub">Tone, niche, and automation toggles</span>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Agent behavior</h2></div>
+          <div class="settings">
+            <label>Niche <input id="setNiche" placeholder="AI and technology" /></label>
+            <label>Tone
+              <select id="setTone">
+                <option value="casual">Casual</option>
+                <option value="friendly">Friendly</option>
+                <option value="professional">Professional</option>
+                <option value="bold">Bold</option>
+                <option value="expert">Expert</option>
+              </select>
+            </label>
+            <label>Follower target <input id="setTarget" type="number" /></label>
+            <label class="check"><input id="setAutoPost" type="checkbox" /> Auto post by AI</label>
+            <label class="check"><input id="setAutoReply" type="checkbox" /> Auto-reply (humanized)</label>
+            <button class="btn" id="saveSettings">Save</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>AI provider status</h2></div>
+          <div id="aiStatusBox" class="ai-status"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
 
   <script src="app.js"></script>
 </body>

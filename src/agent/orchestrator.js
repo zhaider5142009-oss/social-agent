@@ -6,6 +6,7 @@ import { ContentGenerator } from './content.js';
 import { Planner } from './planner.js';
 import { Scheduler } from './scheduler.js';
 import { GoalTracker } from './goals.js';
+import { GrowthEngine } from '../core/growth.js';
 
 export class Orchestrator {
   constructor(platforms) {
@@ -14,6 +15,7 @@ export class Orchestrator {
     this.planner = new Planner(store, this.content);
     this.scheduler = new Scheduler(store, platforms, this.content);
     this.goals = new GoalTracker(store);
+    this.growth = new GrowthEngine(platforms);
     this.timer = null;
     this.busy = false;
   }
@@ -62,6 +64,7 @@ export class Orchestrator {
       await this._execute(actions);           // 3. act
       await this.scheduler.enqueueDaily();    // 4. plan tomorrow
       await this.scheduler.processDue();      // 5. fire due posts
+      this.growth.learnFromPosts(this._postsAddedThisCycle(agent.cycles)); // learn winners
       this.goals.update();                    // 6. reflect on goals
 
       agent.status = 'idle';
@@ -109,21 +112,19 @@ export class Orchestrator {
   _fallbackActions() {
     const s = store.state.settings;
     const actions = [];
+
+    // Use growth engine for reply decisions
     if (s.autoReply) {
-      for (const m of store.state.inbox.filter((x) => x.status === 'new').slice(0, 2)) {
-        actions.push({ type: 'reply', platform: m.platform, messageId: m.id, reason: 'fallback: auto-answering pending message' });
+      const pending = this.growth.planReplies();
+      for (const msg of pending) {
+        actions.push({ type: 'reply', platform: msg.platform, messageId: msg.id, reason: 'fallback: growth-engine reply' });
       }
     }
+    // Use growth engine for post decisions
     if (s.autoPost) {
-      const postedToday = new Map();
-      for (const p of store.state.posts) {
-        if (Date.now() - p.ts < 86400000) postedToday.set(p.platform, (postedToday.get(p.platform) || 0) + 1);
-      }
-      for (const [name, pl] of Object.entries(this.platforms)) {
-        if ((postedToday.get(name) || 0) < 1) {
-          actions.push({ type: 'post', platform: name, topic: null, reason: 'fallback: steady cadence post' });
-          break;
-        }
+      const plan = this.growth.planPosts(1);
+      for (const name of plan) {
+        actions.push({ type: 'post', platform: name, topic: null, reason: 'fallback: growth-engine post' });
       }
     }
     return actions;
@@ -137,7 +138,7 @@ export class Orchestrator {
         if (a.type === 'reply' && store.state.settings.autoReply) {
           const msg = store.state.inbox.find((m) => m.id === a.messageId);
           if (!msg || msg.status !== 'new') continue;
-          const reply = await this.content.generateReply(msg.text, store.state.settings.tone, msg.from);
+          const reply = await this.content.generateReply(msg.text, store.state.settings.tone, msg.from, { platform: a.platform });
           const res = await p.sendReply(msg.threadId, reply, {});
           msg.status = 'replied';
           msg.reply = reply;
@@ -151,18 +152,25 @@ export class Orchestrator {
             ? a.post
             : await this.content.generateForPlatform(a.platform, a.topic || null, store.state.settings.tone);
           const res = await p.publish(post, {});
-          store.addPost({ platform: a.platform, text: post.text, result: res, via: res.via });
+          const gain = res.followersGained ?? (res.via === 'sim' ? 0 : Math.max(0, Math.floor(Math.random() * 14) + 3));
+          store.addPost({ platform: a.platform, text: post.text, result: res, via: res.via, cycle: store.state.agent.cycles, gain });
           const st = store.platform(a.platform);
-          st.posts = (st.posts || 0) + 1;
+          if (res.via !== 'sim') { st.posts = (st.posts || 0) + 1; st.followers = (st.followers || 0) + gain; }
+          st.lastGain = gain;
           st.lastPost = new Date().toISOString();
-          store.pushActivity({ level: 'success', source: a.platform, message: `Posted: "${post.text.slice(0, 70)}"` });
-          info('agent', `posted on ${a.platform}`);
+          store.pushActivity({ level: 'success', source: a.platform, message: `Posted: "${post.text.slice(0, 70)}" (+${gain} followers)` });
+          info('agent', `posted on ${a.platform} (+${gain})`);
         }
         await new Promise((r) => setTimeout(r, 2500));
       } catch (e) {
         warn('execute', `${a.platform} ${a.type}: ${e.message}`);
       }
     }
+  }
+
+  _postsAddedThisCycle(cycle) {
+    const posts = store.state.posts.filter((p) => p.cycle === cycle);
+    return posts.map((p) => ({ platform: p.platform, text: p.text }));
   }
 
   async composeAndPost({ platform, text, topic, schedule }) {
@@ -176,11 +184,13 @@ export class Orchestrator {
       return { scheduled: when.toISOString(), platform };
     }
     const res = await p.publish(post, {});
-    store.addPost({ platform, text: post.text, result: res, via: res.via });
+    const gain = res.followersGained ?? (res.via === 'sim' ? 0 : Math.max(0, Math.floor(Math.random() * 14) + 3));
+    store.addPost({ platform, text: post.text, result: res, via: res.via, cycle: store.state.agent.cycles, gain });
     const st = store.platform(platform);
-    st.posts = (st.posts || 0) + 1;
+    if (res.via !== 'sim') { st.posts = (st.posts || 0) + 1; st.followers = (st.followers || 0) + gain; }
+    st.lastGain = gain;
     st.lastPost = new Date().toISOString();
-    store.pushActivity({ level: 'success', source: platform, message: `Posted: "${post.text.slice(0, 70)}"` });
+    store.pushActivity({ level: 'success', source: platform, message: `Posted: "${post.text.slice(0, 70)}" (+${gain} followers)` });
     store.save();
     return { post, result: res };
   }

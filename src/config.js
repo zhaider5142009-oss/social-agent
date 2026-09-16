@@ -14,6 +14,11 @@ export const config = {
     modelFast: env('AI_MODEL_FAST', 'openai/gpt-4o-mini'),
     url: 'https://openrouter.ai/api/v1/chat/completions',
   },
+  gemini: {
+    apiKey: env('GEMINI_API_KEY', ''),
+    model: env('GEMINI_MODEL', 'gemini-3.6-flash'),
+    url: 'https://generativelanguage.googleapis.com/v1beta/models',
+  },
   agent: {
     cadence: num('AGENT_CADENCE', 45),
     maxActions: num('MAX_ACTIONS_PER_CYCLE', 4),

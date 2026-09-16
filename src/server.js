@@ -8,6 +8,7 @@ import { store } from './core/store.js';
 import { ai } from './core/ai.js';
 import { mcpManager } from './mcp/manager.js';
 import { onLog } from './core/logger.js';
+import { feed, saveCredential } from './connectors.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -64,7 +65,11 @@ export function startServer(platforms, orchestrator) {
       },
       mcp: { platforms: Object.keys(store.state.platforms), connected: mcpManager.connected },
       platformMeta: platformMeta(),
+      connectorMeta: feed(platforms),
       aiUsage: ai.stats(),
+      ai: { provider: ai.provider, model: config.gemini.model, modelFast: config.openrouter.modelFast },
+      growth: orchestrator.growth ? orchestrator.growth.analyze() : [],
+      playbook: orchestrator.growth ? orchestrator.growth.playbook.slice(-5) : [],
       running: !!orchestrator.timer,
     });
   });
@@ -153,6 +158,41 @@ export function startServer(platforms, orchestrator) {
   });
 
   api.get('/goals', (req, res) => res.json(store.state.goals));
+
+  // ---- Connectors -------------------------------------------------------
+  api.get('/connectors', (req, res) => res.json(feed(platforms)));
+
+  api.post('/connectors/credential', (req, res) => {
+    const { key, value } = req.body || {};
+    if (!key || !value) return res.status(400).json({ ok: false, error: 'key and value required' });
+    const out = saveCredential(key, value);
+    out.connectors = feed(platforms);
+    res.json(out);
+  });
+
+  api.post('/connectors/test/:name', async (req, res) => {
+    const p = platforms[req.params.name];
+    if (!p) return res.status(404).json({ ok: false, error: 'unknown connector' });
+    try {
+      const metrics = await p.metrics({});
+      res.json({ ok: true, mode: p.mode(), metrics, inputOk: p.hasCredentials() });
+    } catch (e) {
+      res.json({ ok: false, mode: p.mode(), error: e.message });
+    }
+  });
+
+  // ---- Humanizer demo endpoint -----------------------------------------
+  api.post('/humanize', async (req, res) => {
+    const { text, platform, tone, sender } = req.body || {};
+    if (!text) return res.status(400).json({ ok: false, error: 'text required' });
+    try {
+      const { humanizeReply } = await import('./core/humanizer.js');
+      const h = await humanizeReply({ text }, { platform: platform || 'x', tone: tone || 'casual', sender: sender || 'a follower' });
+      res.json({ ok: true, ...h });
+    } catch (e) {
+      res.status(500).json({ ok: false, error: e.message });
+    }
+  });
 
   app.use('/api', api);
 
