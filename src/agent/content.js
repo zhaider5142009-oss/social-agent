@@ -89,7 +89,7 @@ Write the post now. Hook in the first line. Under 1200 characters. CTA that the 
     try {
       const h = await humanizeReply(
         { text: message },
-        { platform: opts.platform, tone, sender, niche: store.state?.settings?.niche },
+        { platform: opts.platform, tone, sender, niche: store.state?.settings?.niche, history: opts.history || [] },
       );
       return h.reply;
     } catch (e) {
@@ -97,6 +97,7 @@ Write the post now. Hook in the first line. Under 1200 characters. CTA that the 
     }
 
     const sys = `You are the auto-reply bot of a social media brand with tone: ${tone}.
+Conversation so far: ${JSON.stringify(opts.history || []).slice(0, 400)}
 Return JSON: {"reply":"one warm, on-brand answer","doFollowUp":false}. Keep it under 40 words.`;
     const out = await ai.plan(sys, `Reply to ${sender || 'a follower'} who said: "${message}"`);
     return (out && out.reply) ? out.reply : 'Thanks for reaching out — really appreciate it!';

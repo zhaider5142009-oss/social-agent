@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const state = { data: null };
 
-const VIEWS = ['dashboard', 'connectors', 'inbox', 'brain', 'growth', 'viral', 'activity', 'settings'];
+const VIEWS = ['dashboard', 'analytics', 'connectors', 'inbox', 'brain', 'growth', 'viral', 'activity', 'settings'];
 
 async function fetchJson(url, opts) {
   const r = await fetch(url, {
@@ -104,26 +104,35 @@ function renderConnectors(d) {
 
   $('connectors').innerHTML = keys.map((name) => {
     const c = conns[name];
-    const canSave = c.creds.some((f) => !f.set);
-    return `<div class="connector ${c.connected ? 'on' : ''}">
+    const isLive = c.mode === 'rest' || c.mode === 'mcp';
+    const inSim = c.mode === 'sim' && c.connected;
+    let stateChip;
+    if (isLive) stateChip = `<span class="conn-state ok"><span class="dot"></span>Connected</span>`;
+    else if (inSim) stateChip = `<span class="conn-state sim"><span class="dot"></span>Demo mode</span>`;
+    else stateChip = `<button class="btn btn-primary conn-connect" data-name="${name}">Connect</button>`;
+
+    return `<div class="connector ${isLive ? 'live' : ''}">
       <div class="conn-head">
-        <span class="dot ${c.connected ? '' : 'off'}"></span>
-        <span class="conn-title">${escapeHtml(c.label)}</span>
-        <span class="conn-mode">${c.mode}</span>
+        <div class="conn-id"><span class="conn-logo">${escapeHtml(c.label[0])}</span><div><span class="conn-title">${escapeHtml(c.label)}</span><span class="conn-handle">${escapeHtml(c.handle)}</span></div></div>
+        ${stateChip}
       </div>
-      <div class="conn-task"><b>Task:</b> ${escapeHtml(c.task)}</div>
-      <div class="conn-fn"><b>Function:</b> ${escapeHtml(c.function)}</div>
-      <a href="${escapeHtml(c.link)}" target="_blank" class="conn-link">Get credentials →</a>
-      <div class="conn-creds">
+      <div class="conn-task">${escapeHtml(c.task)}</div>
+      <div class="conn-foot">
+        <span class="conn-mode">${c.mode === 'mcp' ? 'MCP' : c.mode === 'rest' ? 'Live' : 'Simulation'}</span>
+        <a href="${escapeHtml(c.link)}" target="_blank" rel="noopener" class="conn-link">Get API access →</a>
+      </div>
+      <div class="conn-panel" hidden>
+        <div class="conn-panel-tip">Paste the credential(s) below. The agent will store them locally and activate <b>${escapeHtml(c.label)}</b> for live posting + replies.</div>
         ${c.creds.map((f) => `
-          <label>${escapeHtml(f.label)}</label>
+          <label class="cred">${escapeHtml(f.label)}</label>
           <input type="password" data-key="${f.key}" autocomplete="new-password"
             placeholder="${escapeHtml(f.placeholder)}" ${f.set ? `value="••••••••"` : ''} />
         `).join('')}
-      </div>
-      <div class="conn-actions">
-        <button class="btn btn-primary conn-save" data-name="${name}" ${!canSave ? 'disabled' : ''}>Save</button>
-        <button class="btn conn-test" data-name="${name}">Test</button>
+        <div class="conn-actions">
+          <button class="btn btn-primary conn-save" data-name="${name}">Save &amp; connect</button>
+          <button class="btn conn-test" data-name="${name}">Test connection</button>
+          <button class="btn conn-cancel">Cancel</button>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -134,18 +143,27 @@ function renderInbox(d) {
   const items = d.inbox || [];
   const n = items.filter((m) => m.status === 'new').length;
   $('inboxBadge').textContent = n;
+  const convs = d.conversations || {};
   if (!items.length) { $('inboxBox').innerHTML = '<div class="empty muted">No messages yet — they arrive while the agent runs.</div>'; return; }
-  $('inboxBox').innerHTML = items.slice(0, 20).map((m) => `
-    <div class="msg ${m.status === 'new' ? 'new' : ''}" data-id="${m.id}">
+  $('inboxBox').innerHTML = items.slice(0, 20).map((m) => {
+    const ti = m.threadId || `${m.platform}:${m.from || 'anon'}`;
+    const thread = convs[ti]?.messages || [];
+    const history = thread.length > 1
+      ? `<div class="thread-context">${thread.slice(0, -1).map((t) =>
+          `<div class="${t.role === 'out' ? 't-out' : 't-in'}"><b>${t.role === 'out' ? 'You' : escapeHtml(m.from)}:</b> ${escapeHtml(t.text)}</div>`).join('')}</div>`
+      : '';
+    return `<div class="msg ${m.status === 'new' ? 'new' : ''}" data-id="${m.id}">
       <div class="msg-head">
         <span>${escapeHtml(m.from)} <span class="plat">· ${escapeHtml(m.platform)}</span></span>
         <span class="plat">${timeAgo(m.ts)}</span>
       </div>
+      ${history}
       <div class="msg-text">${escapeHtml(m.text)}</div>
       ${m.status === 'replied' && m.reply ? `<div class="msg-reply"><b>Agent:</b> ${escapeHtml(m.reply)}</div>` : ''}
       ${m.status === 'new' ? `<div class="row"><input placeholder="Write a reply…" /><button class="btn mini reply-btn">Send</button>
         <button class="btn mini ai-reply-btn" title="Let AI write it human-friendly">✨ AI</button></div>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 /* ---------------- Render: brain ---------------- */
@@ -183,6 +201,59 @@ function renderGrowth(d) {
   $('playbook').innerHTML = pb.length
     ? pb.map((p) => `<div class="pb-item">${escapeHtml(p.text)}<div class="pb-meta">${escapeHtml(p.platform)} · +${p.gain} followers</div></div>`).join('')
     : '<div class="muted">The agent will remember what content wins followers here.</div>';
+}
+
+/* ---------------- Render: analytics ---------------- */
+function renderAnalytics(d) {
+  const a = d.analysis;
+  if (!a) return;
+  const ov = $('anOverview');
+  ov.innerHTML = `
+    <div class="an-ov-grid">
+      <div class="an-ov-cell"><span>Current</span><b>${fmt(a.current)}</b></div>
+      <div class="an-ov-cell"><span>Target</span><b>${fmt(a.target)}</b></div>
+      <div class="an-ov-cell"><span>Velocity</span><b>+${fmt(a.velocityPerDay)}/day</b></div>
+      <div class="an-ov-cell"><span>ETA to 1M</span><b>${a.etaDays !== null ? a.etaDays + ' days' : '—'}</b></div>
+    </div>
+    <div class="an-bar"><div style="width:${Math.max(0.2, (a.current / a.target) * 100)}%"></div></div>
+    <div class="an-ov-meta">
+      <span>Compounding: <b>${a.compounding}</b> platform(s)</span>
+      <span>Stalled: <b>${a.stalled}</b></span>
+      <span>Avg engagement: <b>${a.engagementAvg}%</b></span>
+    </div>`;
+
+  const tbl = $('anPlatforms');
+  tbl.innerHTML = `<div class="an-row an-head"><span>Platform</span><span>Followers</span><span>Growth/day</span><span>Eng%</span><span>Posts/day</span><span>Avg virality</span><span>ETA</span></div>` +
+    a.platforms.map((p) => `
+      <div class="an-row">
+        <span class="an-pname">${escapeHtml(p.name)}</span>
+        <span>${fmt(p.followers)}</span>
+        <span class="${p.growthPerDay > 0 ? 'pos' : 'neg'}">${p.growthPerDay > 0 ? '+' : ''}${fmt(p.growthPerDay)}</span>
+        <span>${p.engagement}%</span>
+        <span>${p.postsToday}</span>
+        <span class="${p.avgVirality !== null && p.avgVirality >= 38 ? 'pos' : ''}">${p.avgVirality !== null ? p.avgVirality + '/100' : '—'}${p.bestVirality ? ` <span class="muted">best ${p.bestVirality}</span>` : ''}</span>
+        <span>${p.etaDays !== null ? p.etaDays + 'd' : '—'}</span>
+      </div>`).join('') || '<div class="muted">Run cycles to populate analytics.</div>';
+
+  // Algorithm conformance readout: how well recent posts match each platform's rulebook.
+  const rules = d.algo?.rules || {};
+  const posts = d.posts || [];
+  const conformance = Object.keys(rules).map((name) => {
+    const r = rules[name];
+    const mine = posts.filter((p) => p.platform === name && typeof p.virality === 'number').slice(0, 10);
+    const sc = mine.length ? Math.round(mine.reduce((a, p) => a + p.virality, 0) / mine.length) : 0;
+    const tagCount = mine.some((p) => (p.hashtags || []).length) ? mine.map((p) => (p.hashtags || []).length).reduce((a, b) => a + b, 0) / mine.length : 0;
+    return { name: r.name, score: sc, tagCount, n: mine.length, hashtags: r.hashtags };
+  });
+  $('anAlgo').innerHTML = conformance.map((c) => `
+    <div class="an-algo-row">
+      <span class="an-pname">${escapeHtml(c.name)}</span>
+      ${c.n ? `
+        <span class="an-algo-bar"><div style="width:${Math.max(2, c.score)}%"></div></span>
+        <span class="${c.score >= 38 ? 'pos' : ''}">${c.score}/100</span>
+        <span class="muted">${c.n} scored post(s) · tags ${Math.round(c.tagCount)}/${c.hashtags}</span>`
+      : '<span class="muted">no scored posts yet</span>'}
+    </div>`).join('');
 }
 
 /* ---------------- Render: viral engine ---------------- */
@@ -254,6 +325,7 @@ function renderAll(d) {
   renderInbox(d);
   renderThinking(d);
   renderGrowth(d);
+  renderAnalytics(d);
   renderViral(d);
   renderActivity(d);
   renderAiStatus(d);
@@ -335,8 +407,23 @@ function setup() {
   $('connectors').addEventListener('click', async (ev) => {
     const save = ev.target.closest('.conn-save');
     const test = ev.target.closest('.conn-test');
+    const connect = ev.target.closest('.conn-connect');
+    const cancel = ev.target.closest('.conn-cancel');
     const connEl = ev.target.closest('.connector');
     if (!connEl) return;
+
+    // ChatGPT-style: one click opens the connect panel.
+    if (connect) {
+      const panel = connEl.querySelector('.conn-panel');
+      if (panel) panel.hidden = false;
+      return;
+    }
+    if (cancel) {
+      const panel = connEl.querySelector('.conn-panel');
+      if (panel) panel.hidden = true;
+      return;
+    }
+
     const name = save ? save.dataset.name : test ? test.dataset.name : null;
     if (!name) return;
 
@@ -351,7 +438,7 @@ function setup() {
     }
 
     if (save) {
-      const fields = connEl.querySelectorAll('.conn-creds input');
+      const fields = connEl.querySelectorAll('.conn-panel input');
       let saved = 0;
       save.disabled = true;
       try {
@@ -361,7 +448,7 @@ function setup() {
             saved++;
           }
         }
-        if (saved) toast(`${name}: ${saved} credential(s) saved. Restart agent to activate REST mode.`);
+        if (saved) toast(`${name}: ${saved} credential(s) saved. Restart the agent to go live.`);
         else toast('No new credentials entered.', true);
         refresh();
       } catch (e) { toast(e.message, true); }

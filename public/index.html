@@ -16,7 +16,7 @@
           <div class="logo">SA</div>
           <div class="brand-txt">
             <h1>Social Agent</h1>
-            <p>AI Management Brain</p>
+            <p>Autonomous growth OS</p>
           </div>
         </div>
         <button class="side-toggle" id="sideToggle" title="Collapse sidebar">«</button>
@@ -24,6 +24,7 @@
 
       <nav class="side-nav">
         <button class="nav-item active" data-view="dashboard"><span class="nav-ico">◈</span> Dashboard</button>
+        <button class="nav-item" data-view="analytics"><span class="nav-ico">◉</span> Analytics</button>
         <button class="nav-item" data-view="connectors"><span class="nav-ico">⌁</span> Connectors
           <span class="nav-badge" id="connBadge" title="connected/total"></span>
         </button>
@@ -45,7 +46,7 @@
         <div class="status-pill" id="agentStatus">idle</div>
         <button class="side-action" id="toggleBtn">Start agent</button>
         <button class="side-action" id="cycleBtn">Run brain now</button>
-        <div class="side-logo">SA · v2</div>
+        <div class="side-logo">Social Agent OS</div>
       </div>
     </aside>
 
@@ -80,6 +81,26 @@
         <div class="card">
           <div class="card-head"><h2>Platform health</h2></div>
           <div class="platforms" id="platforms"></div>
+        </div>
+      </section>
+
+      <!-- ============ ANALYTICS ============ -->
+      <section class="view" id="view-analytics">
+        <div class="view-head">
+          <h2>Analytics</h2>
+          <span class="head-sub">Real measured growth, not estimates</span>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Portfolio projection</h2><span class="chip" id="anGen">live</span></div>
+          <div id="anOverview" class="an-overview"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Per-platform detail</h2></div>
+          <div id="anPlatforms" class="an-platforms"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Algorithm conformance</h2><span class="chip">scored posts</span></div>
+          <div id="anAlgo" class="an-algo"></div>
         </div>
       </section>
 

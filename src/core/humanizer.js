@@ -118,21 +118,27 @@ export async function humanizeReply(msg, ctx = {}) {
     sender = 'a follower',
     niche = 'AI and technology',
     persona = 'an approachable creator who genuinely enjoys talking to people',
+    history = [],   // previous turns in this thread: [{role:'in'|'out', text}]
   } = ctx;
 
   const voice = PLATFORM_VOICE[platform] || 'natural, warm, short';
+
+  const historyBlock = history && history.length
+    ? ['', 'Conversation so far (same chat thread):', ...history.map((h) => `  ${h.role === 'out' ? 'You' : sender}: "${(h.text || '').slice(0, 300)}"`)].join('\n')
+    : '';
 
   const system = `You write replies for a real social media account. You are ${persona}.
 Writing rules — CRITICAL:
 1. Reply like a real human in a DM/comment thread, NOT a customer-support bot or marketer.
 2. Match the sender's energy: short if they're short, warm if they're warm, playful if they're playful.
-3. Vary sentence length. Use contractions. Imperfect but correct grammar is fine.
-4. Never say: "as an AI", "happy to help", "hope this helps", "let me know if you have any questions",
+3. Reference the conversation context above — keep continuity with earlier messages in this thread; answer what they actually asked, not a generic alter ego.
+4. Vary sentence length. Use contractions. Imperfect but correct grammar is fine.
+5. Never say: "as an AI", "happy to help", "hope this helps", "let me know if you have any questions",
    "great question", "absolutely", "I'd be happy to", "feel free to", "additionally", "in conclusion".
-5. Show genuine curiosity or empathy. Ask ONE natural follow-up if it fits.
-6. Mind the platform: ${voice}
-7. Keep it under ${platform === 'x' || platform === 'snapchat' ? '20' : '45'} words.
-8. Do not use hashtags, emojis unless the user used one, or list formatting.
+6. Show genuine curiosity or empathy. Ask ONE natural follow-up if it fits.
+7. Mind the platform: ${voice}
+8. Keep it under ${platform === 'x' || platform === 'snapchat' ? '20' : '45'} words.
+9. Do not use hashtags, emojis unless the user used one, or list formatting.
 
 Return ONLY plain text — the reply itself. No quotes, no labels, no bullets.`;
 
@@ -140,14 +146,14 @@ Return ONLY plain text — the reply itself. No quotes, no labels, no bullets.`;
     sender && sender !== 'a follower' ? `handling ${sender}` : 'a follower'
   }) just sent this to your account:
 "${msg.text.slice(0, 500)}"
-
+${historyBlock}
 Brand niche: ${niche}
 Your brand tone: ${tone}
 
 Write the reply now.`;
 
   try {
-    const raw = await ai.chat({ system, user, provider: 'gemini', temperature: 0.9, maxTokens: 180 });
+    const raw = await ai.chat({ system, user, provider: 'gemini', temperature: 0.9, maxTokens: 300 });
     let reply = humanizeDraft(raw, platform, tone);
     if (isGarbageDraft(reply)) throw new Error('garbled draft');
 
@@ -160,7 +166,7 @@ Write the reply now.`;
         user: `Original reply: "${reply}"`,
         provider: 'gemini',
         temperature: 0.9,
-        maxTokens: 160,
+        maxTokens: 280,
       });
       const audited = humanizeDraft(audit, platform, tone);
       if (audited && !isGarbageDraft(audited)) reply = audited;
@@ -178,12 +184,17 @@ Write the reply now.`;
 
 function isGarbageDraft(reply) {
   if (!reply) return true;
-  const wordCount = reply.split(/\s+/).length;
-  if (wordCount < 3) return true;
+  const wordCount = reply.split(/\s+/).filter(Boolean).length;
+  if (wordCount < 4) return true;
   // Model echoing its instructions instead of answering.
   if (/forbidden|here are the rules|writing rules|do not say|never say|don't say|as an ai|i can't|i cannot (say|write|reply)/i.test(reply)) return true;
   // Bot-soup or pure list fragments.
   if (/(^|\s)[*•\-]\s*["']/.test(reply) && wordCount < 8) return true;
+  // Truncated mid-word / mid-sentence (Gemini occasionally cuts).
+  if (/[A-Za-z]['’]?$/.test(reply.trim()) && !/[.!?…"']$/.test(reply.trim())) return true;
+  const tail = reply.trim();
+  if (/['’”]$/.test(tail) && wordCount < 6) return true;
+  if (!/[.!?…]/.test(tail)) return true; // a real reply ends a sentence
   return false;
 }
 

@@ -11,6 +11,7 @@ import { onLog } from './core/logger.js';
 import { feed, saveCredential } from './connectors.js';
 import { ALGO, TARGET_FOLLOWERS } from './core/algo.js';
 import { scoreVirality, VIRAL_QUALITY_FLOOR } from './core/viral.js';
+import { analyze } from './core/analysis.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -56,6 +57,7 @@ export function startServer(platforms, orchestrator) {
       totals: store.getTotals(),
       platforms: store.state.platforms,
       inbox: store.state.inbox,
+      conversations: store.state.conversations,
       activity: store.state.activity.slice(0, 60),
       posts: store.state.posts.slice(0, 30),
       goals: store.state.goals,
@@ -75,6 +77,7 @@ export function startServer(platforms, orchestrator) {
       momentum: orchestrator.viral ? orchestrator.viral.momentum() : null,
       viral: orchestrator.viral ? orchestrator.viral.stats : null,
       algo: { rules: ALGO, target: TARGET_FOLLOWERS },
+      analysis: analyze(),
       running: !!orchestrator.timer,
     });
   });

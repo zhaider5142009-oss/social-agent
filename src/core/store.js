@@ -35,6 +35,7 @@ const defaultState = () => ({
   goals: defaultGoals,
   activity: [],
   inbox: [],
+  conversations: {},
   posts: [],
   platforms: {},
   agent: {
@@ -96,7 +97,35 @@ export class Store {
     const item = { id: crypto.randomUUID(), ts: Date.now(), status: 'new', reply: null, ...msg };
     this.state.inbox.unshift(item);
     if (this.state.inbox.length > 200) this.state.inbox.length = 200;
+
+    // Thread memory: fold this message into its conversation context.
+    const ti = this.threadId(msg.platform, msg.threadId, msg.from);
+    const ctx = this.state.conversations[ti] || { platform: msg.platform, messages: [] };
+    ctx.messages.push({ role: 'in', text: item.text, ts: Date.now() });
+    if (ctx.messages.length > 12) ctx.messages = ctx.messages.slice(-12);
+    this.state.conversations[ti] = ctx;
     return item;
+  }
+
+  threadId(platform, threadId, from) {
+    return threadId || `${platform}:${from || 'anon'}`;
+  }
+
+  /** Recent conversation turns for a thread, most-recent last. */
+  threadContext(platform, threadId, from, limit = 8) {
+    const ti = this.threadId(platform, threadId, from);
+    const ctx = this.state.conversations[ti];
+    if (!ctx || !ctx.messages) return [];
+    return ctx.messages.slice(-limit);
+  }
+
+  /** Record our side of a reply into the thread memory. */
+  rememberReply(platform, threadId, from, reply) {
+    const ti = this.threadId(platform, threadId, from);
+    const ctx = this.state.conversations[ti] || { platform, messages: [] };
+    ctx.messages.push({ role: 'out', text: reply, ts: Date.now() });
+    if (ctx.messages.length > 12) ctx.messages = ctx.messages.slice(-12);
+    this.state.conversations[ti] = ctx;
   }
 
   addPost(post) {

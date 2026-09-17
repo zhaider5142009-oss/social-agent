@@ -43,11 +43,15 @@ out-perform mediocre content in real time, exactly like a real platform algorith
 The web UI is modeled after ChatGPT: a collapsible dark sidebar with all features:
 
 - **Dashboard** — KPIs, composer (post now / all platforms), recent posts, platform health.
-- **Connectors** — every platform connector shows its **specific task** and **function**, live
-  mode (`sim`/`rest`/`mcp`), a form with the exact credentials it needs (with links to get them),
-  **Save** and **Test** buttons. Connect any connector right from the sidebar.
+- **Analytics** — real, measured analytics from running cycles: portfolio velocity (followers/day),
+  ETA to 1M, per-platform growth, engagement, virality and algorithm conformance — no estimates.
+- **Connectors** — ChatGPT-style **Connect** flow: each platform shows a single **Connect** button
+  with its live status badge (`Connected` / `Demo mode`). Connect opens the exact credentials panel
+  (with links to get them), then **Save & connect** / **Test** / **Cancel**.
 - **Inbox** — live incoming messages on all platforms; each has **Send** and an **✨ AI** button
-  that drafts a humanized reply for you to send.
+  that drafts a humanized reply for you to send. Replies are **thread-aware** — every message keeps
+  its own conversation history (that thread ID), and the AI answers with full context of who said
+  what, just like ChatGPT.
 - **Brain & Thinking** — the agent's deep reasoning, plus a **humanizer test bench**.
 - **Growth Intel** — platform scores and the learned playbook.
 - **Viral Engine** — **Momentum to 1M** tracker, the full per-platform **algorithm rulebook**, and a
@@ -80,8 +84,9 @@ fully functional out of the box.
 1. **Observe** — pulls metrics + inbox from all 11 platforms.
 2. **Deep reason** — a planning LLM reads total followers, per-platform state, unread inbox, goals
    and the skills library, then returns an action plan with reasoning.
-3. **Act** — executes **humanized auto-replies** and posts chosen by the **growth engine**, one at
-   a time, with rate limiting and a circuit breaker.
+3. **Act** — executes **humanized, thread-aware auto-replies** (each conversation keeps its own
+   history and is answered with full context) and posts chosen by the **growth engine**, one at a
+   time, with rate limiting and a circuit breaker.
 4. **Plan tomorrow** — a scheduler queues platform best-practice posts (timing-aware).
 5. **Learn** — records which posts gained followers into the playbook.
 6. **Reflect** — updates goal progress and adapts.
@@ -150,10 +155,11 @@ src/
     logger.js              logging + activity feed
     store.js               JSON store (persisted to data/state.json)
     ai.js                  AI client (Gemini + OpenRouter, queue/retry/model-chain breaker)
-    humanizer.js           ★ extreme humanizer — replies that read like a real person
+    humanizer.js           ★ extreme humanizer — replies that read like a real person (thread-aware)
     growth.js              ★ growth intelligence — scores, posting plan, learned playbook
     viral.js               ★ virality engine — scoring, quality floor, amplification, momentum
     algo.js                ★ platform algorithm rulebook (rewards, punishes, windows, formats)
+    analysis.js            real analytics — growth/day, engagement, virality, ETA to 1M
   mcp/                     stdio + HTTP MCP clients, manager
   platforms/               base connector + 11 platform adapters + sim engine (virality-aware)
   agent/
@@ -163,7 +169,7 @@ src/
     scheduler.js           best-time queue + first-run seed
     goals.js               KPI goal tracking (1M target by default)
   server.js                Express + REST + SSE
-public/                    ChatGPT-style dark UI (HTML/CSS/JS) with Viral Engine view
+public/                    ChatGPT-style dark UI (HTML/CSS/JS) — Analytics, Virtual Engine, Connect flow
 skills/                    markdown skill library injected into the planner
 data/state.json            persisted state (created at runtime)
 ```

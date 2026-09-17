@@ -144,10 +144,12 @@ export class Orchestrator {
         if (a.type === 'reply' && store.state.settings.autoReply) {
           const msg = store.state.inbox.find((m) => m.id === a.messageId);
           if (!msg || msg.status !== 'new') continue;
-          const reply = await this.content.generateReply(msg.text, store.state.settings.tone, msg.from, { platform: a.platform });
+          const history = store.threadContext(msg.platform, msg.threadId, msg.from);
+          const reply = await this.content.generateReply(msg.text, store.state.settings.tone, msg.from, { platform: a.platform, history });
           const res = await p.sendReply(msg.threadId, reply, {});
           msg.status = 'replied';
           msg.reply = reply;
+          store.rememberReply(msg.platform, msg.threadId, msg.from, reply);
           const st = store.platform(a.platform);
           st.replies = (st.replies || 0) + 1;
           st.followers += Math.max(1, Math.floor(Math.random() * 4));
@@ -252,6 +254,7 @@ export class Orchestrator {
     const res = await p.sendReply(msg.threadId, text, {});
     msg.status = 'replied';
     msg.reply = text;
+    store.rememberReply(msg.platform, msg.threadId, msg.from, text);
     if (p) {
       const st = store.platform(msg.platform);
       st.replies = (st.replies || 0) + 1;
